@@ -2,7 +2,7 @@ package lysis.builder;
 
 import java.io.IOException;
 import java.io.PrintStream;
-
+import java.io.PrintWriter;
 import lysis.PawnFile;
 import lysis.PawnFile.Automation;
 import lysis.Public;
@@ -60,10 +60,10 @@ import lysis.types.TypeUnit;
 
 public class SourceBuilder {
 	private PawnFile file_;
-	private PrintStream out_;
+	private PrintWriter out_;
 	private String indent_;
 
-	public SourceBuilder(PawnFile file, PrintStream tw) {
+	public SourceBuilder(PawnFile file, PrintWriter tw) {
 		file_ = file;
 		out_ = tw;
 		indent_ = "";

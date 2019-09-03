@@ -1,9 +1,9 @@
 package lysis;
 
-import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.LinkedList;
-
+import javax.swing.JTextArea;
 import lysis.builder.MethodParser;
 import lysis.builder.SourceBuilder;
 import lysis.builder.structure.ControlBlock;
@@ -140,36 +140,33 @@ public class Lysis {
 	/**
 	 * @param args
 	 */
-	public static void main(String[] args) {
-		if (args.length < 1) {
-			System.err.println("usage: <file.smx> or <file.amxx>");
-			return;
-		}
+	public void DecompileIt(String path, String name, JTextArea log) {
 
-		PrintStream sysout;
-		try {
-			sysout = new PrintStream(System.out, true, "UTF-8");
-			System.setOut(sysout);
-		} catch (UnsupportedEncodingException e2) {
-			e2.printStackTrace();
-		}
-
-		String path = args[0];
 		PawnFile file = null;
 		try {
 			file = PawnFile.FromFile(path);
 		} catch (Exception e1) {
+			log.append("File not found or corrupted!\n");
 			e1.printStackTrace();
 			return;
 		}
 
 		if (file == null) {
-			System.err.println("Failed to parse file.");
+			log.append("Failed to parse file.\n");
 			return;
 		}
 
 		// DataOutputStream dOut = new DataOutputStream(System.out);
+	
+		path = path.replace(".smx", "_lysis.sp");
+		PrintWriter writer = null;
 
+		try {
+			writer = new PrintWriter(path);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		
 		// Parse methods for calls and globals which don't have debug info attached.
 		for (int i = 0; i < file.functions().length; i++) {
 			Function fun = file.functions()[i];
@@ -177,13 +174,12 @@ public class Lysis {
 				PreprocessMethod(file, fun);
 			} catch (Throwable e) {
 				e.printStackTrace();
-				System.out.println("");
-				System.out.println("/* ERROR PREPROCESSING! " + e.getMessage() + " */");
-				System.out.println(" function \"" + fun.name() + "\" (number " + i + ")");
+				log.append("/* ERROR PREPROCESSING! " + e.getMessage() + " */\n");
+				log.append(" function \"" + fun.name() + "\" (number " + i + ")\n");
 			}
 		}
 
-		SourceBuilder source = new SourceBuilder(file, System.out);
+		SourceBuilder source = new SourceBuilder(file, writer);
 		try {
 			source.writeGlobals();
 		} catch (Exception e1) {
@@ -196,16 +192,17 @@ public class Lysis {
 			// #if
 			try {
 				DumpMethod(file, source, fun);
-				System.out.println("");
 			} catch (Throwable e) {
 				e.printStackTrace();
-				System.out.println("");
-				System.out.println("/* ERROR! " + e.getMessage() + " */");
-				System.out.println(" function \"" + fun.name() + "\" (number " + i + ")");
-				source = new SourceBuilder(file, System.out);
+				log.append("/* ERROR! " + e.getMessage() + " */\n");
+				log.append(" function \"" + fun.name() + "\" (number " + i + ")\n");
+				source = new SourceBuilder(file, writer);
 			}
 			// #endif
 		}
+		writer.close();
+		name = name.replace(".smx", "_lysis.sp");
+		log.append("Decompiled to '" + name + "'\n");
 	}
 
 }
