@@ -25,19 +25,19 @@ public class Lysis {
 
 	public static void PreprocessMethod(PawnFile file, Function func) throws Exception {
 		MethodParser mp = new MethodParser(file, func);
-		LGraph graph = mp.parse();
-		if (graph == null)
-			return;
+		mp.preprocess();
 
+		int nargs = mp.getNumArgs();
+		
 		// This function had no debug info attached :(
 		if (func.codeEnd() == file.code().bytes().length + 1)
 			func.setCodeEnd(mp.getExitPC() - 4);
 
 		// No argument information for this function :(
-		if (func.args() == null || func.args().length < graph.nargs) {
+		if (func.args() == null || func.args().length < nargs) {
 			LinkedList<Argument> args = new LinkedList<Argument>();
 			int start = 0;
-			int num = graph.nargs;
+			int num = nargs;
 			if (func.args() != null) {
 				start = func.args().length;
 				// Copy present args
@@ -51,7 +51,7 @@ public class Lysis {
 				// See if this argument is already there.
 				// Implementations of functions for different states don't have their arguments
 				// fetched when parsing the debug sections.
-				if (!file.addArgumentVar(func, i))
+				if (!file.addArgumentDummyVar(func, i))
 					arg = file.buildArgumentInfo(func, i);
 
 				args.add(arg);

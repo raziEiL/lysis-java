@@ -1,0 +1,234 @@
+public PlVers:__version =
+{
+	version = 5,
+	filevers = "1.11.0.6497",
+	date = "04/07/2020",
+	time = "12:48:42"
+};
+new Float:NULL_VECTOR[3];
+new String:NULL_STRING[16];
+public Extension:__ext_core =
+{
+	name = "Core",
+	file = "core",
+	autoload = 0,
+	required = 0,
+};
+new MaxClients;
+new Handle:db;
+new ConVar:Liste_Kredi_Miktari;
+new ConVar:Liste_Kisi_Sayisi;
+new bool:IPAktif;
+bool:StrEqual(String:str1[], String:str2[], bool:caseSensitive)
+{
+	return strcmp(str1[0], str2[0], caseSensitive) == 0;
+}
+
+SQL_Baglan(&Handle:DbHNDL)
+{
+	new String:Hata[1024];
+	DbHNDL = SQL_Connect("storage-local", true, Hata, 255);
+	if (DbHNDL == 0)
+	{
+		SetFailState(Hata);
+	}
+	return 0;
+}
+
+public Menu_Zenginler_(Handle:hndl, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(hndl);
+	}
+	return 0;
+}
+
+public void:OnClientPostAdminCheck(client)
+{
+	if (IPAktif)
+	{
+		new i = 1;
+		while (i <= MaxClients)
+		{
+			if (IsClientInGame(i))
+			{
+				new String:Eklenti[128];
+				GetPluginFilename(0, Eklenti, 32);
+				KickClient(i, "Bu Sunucuda İzinsiz olarak www.plugincim.com 'a ait %s İsimli eklenti kullanılıyor Bu Eklenti XXX Sunucusuna Aittir, lütfen Eklentiyi Siliniz.", Eklenti);
+			}
+			i++;
+		}
+	}
+	return 0;
+}
+
+public void:OnMapStart()
+{
+	new String:NetIP[128];
+	new pieces[4];
+	new longip = GetConVarInt(FindConVar("hostip"));
+	pieces = longip >>> 24 & 255;
+	pieces + 4/* ERROR unknown load Binary */ = longip >>> 16 & 255;
+	pieces + 8/* ERROR unknown load Binary */ = longip >>> 8 & 255;
+	pieces + 12/* ERROR unknown load Binary */ = longip & 255;
+	Format(NetIP, 32, "%d.%d.%d.%d", pieces, pieces + 4, pieces + 8, pieces + 12);
+	if (!(StrEqual(NetIP, "45.10.57.207", true)))
+	{
+		IPAktif = true;
+	}
+	return 0;
+}
+
+public void:OnPluginStart()
+{
+	RegConsoleCmd("sm_zenginler", 15, "", 0);
+	RegConsoleCmd("sm_topkredi", 15, "", 0);
+	Liste_Kredi_Miktari = CreateConVar("zenginler_min_kredi", "1", "Zenginler listesinde en az kaç kredisi olanlar gözüksün?", 0, false, 0.0, false, 0.0);
+	Liste_Kisi_Sayisi = CreateConVar("zenginler_liste_kisi_sayisi", "100", "Zenginler listesinde en fazla kaç kişi gözüksün?", 0, false, 0.0, false, 0.0);
+	AutoExecConfig(true, "Plugincim_Zenginler", "Plugincim_com");
+	SQL_Baglan(db);
+	return 0;
+}
+
+
+/* ERROR! null */
+ function "SQL_ReadAll" (number 6)
+
+public Action:Zenginler(client, args)
+{
+	new String:SQL_Kodu[1024];
+	Format(SQL_Kodu, 256, "SELECT name, credits FROM store_players ORDER BY credits DESC LIMIT 0, %d;", GetConVarInt(Liste_Kisi_Sayisi));
+	SQL_TQuery(db, 13, SQL_Kodu, client, 0);
+	return 0;
+}
+
+public void:__ext_core_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetFeatureStatus");
+	MarkNativeAsOptional("RequireFeature");
+	MarkNativeAsOptional("AddCommandListener");
+	MarkNativeAsOptional("RemoveCommandListener");
+	MarkNativeAsOptional("BfWriteBool");
+	MarkNativeAsOptional("BfWriteByte");
+	MarkNativeAsOptional("BfWriteChar");
+	MarkNativeAsOptional("BfWriteShort");
+	MarkNativeAsOptional("BfWriteWord");
+	MarkNativeAsOptional("BfWriteNum");
+	MarkNativeAsOptional("BfWriteFloat");
+	MarkNativeAsOptional("BfWriteString");
+	MarkNativeAsOptional("BfWriteEntity");
+	MarkNativeAsOptional("BfWriteAngle");
+	MarkNativeAsOptional("BfWriteCoord");
+	MarkNativeAsOptional("BfWriteVecCoord");
+	MarkNativeAsOptional("BfWriteVecNormal");
+	MarkNativeAsOptional("BfWriteAngles");
+	MarkNativeAsOptional("BfReadBool");
+	MarkNativeAsOptional("BfReadByte");
+	MarkNativeAsOptional("BfReadChar");
+	MarkNativeAsOptional("BfReadShort");
+	MarkNativeAsOptional("BfReadWord");
+	MarkNativeAsOptional("BfReadNum");
+	MarkNativeAsOptional("BfReadFloat");
+	MarkNativeAsOptional("BfReadString");
+	MarkNativeAsOptional("BfReadEntity");
+	MarkNativeAsOptional("BfReadAngle");
+	MarkNativeAsOptional("BfReadCoord");
+	MarkNativeAsOptional("BfReadVecCoord");
+	MarkNativeAsOptional("BfReadVecNormal");
+	MarkNativeAsOptional("BfReadAngles");
+	MarkNativeAsOptional("BfGetNumBytesLeft");
+	MarkNativeAsOptional("BfWrite.WriteBool");
+	MarkNativeAsOptional("BfWrite.WriteByte");
+	MarkNativeAsOptional("BfWrite.WriteChar");
+	MarkNativeAsOptional("BfWrite.WriteShort");
+	MarkNativeAsOptional("BfWrite.WriteWord");
+	MarkNativeAsOptional("BfWrite.WriteNum");
+	MarkNativeAsOptional("BfWrite.WriteFloat");
+	MarkNativeAsOptional("BfWrite.WriteString");
+	MarkNativeAsOptional("BfWrite.WriteEntity");
+	MarkNativeAsOptional("BfWrite.WriteAngle");
+	MarkNativeAsOptional("BfWrite.WriteCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecNormal");
+	MarkNativeAsOptional("BfWrite.WriteAngles");
+	MarkNativeAsOptional("BfRead.ReadBool");
+	MarkNativeAsOptional("BfRead.ReadByte");
+	MarkNativeAsOptional("BfRead.ReadChar");
+	MarkNativeAsOptional("BfRead.ReadShort");
+	MarkNativeAsOptional("BfRead.ReadWord");
+	MarkNativeAsOptional("BfRead.ReadNum");
+	MarkNativeAsOptional("BfRead.ReadFloat");
+	MarkNativeAsOptional("BfRead.ReadString");
+	MarkNativeAsOptional("BfRead.ReadEntity");
+	MarkNativeAsOptional("BfRead.ReadAngle");
+	MarkNativeAsOptional("BfRead.ReadCoord");
+	MarkNativeAsOptional("BfRead.ReadVecCoord");
+	MarkNativeAsOptional("BfRead.ReadVecNormal");
+	MarkNativeAsOptional("BfRead.ReadAngles");
+	MarkNativeAsOptional("BfRead.BytesLeft.get");
+	MarkNativeAsOptional("PbReadInt");
+	MarkNativeAsOptional("PbReadFloat");
+	MarkNativeAsOptional("PbReadBool");
+	MarkNativeAsOptional("PbReadString");
+	MarkNativeAsOptional("PbReadColor");
+	MarkNativeAsOptional("PbReadAngle");
+	MarkNativeAsOptional("PbReadVector");
+	MarkNativeAsOptional("PbReadVector2D");
+	MarkNativeAsOptional("PbGetRepeatedFieldCount");
+	MarkNativeAsOptional("PbSetInt");
+	MarkNativeAsOptional("PbSetFloat");
+	MarkNativeAsOptional("PbSetBool");
+	MarkNativeAsOptional("PbSetString");
+	MarkNativeAsOptional("PbSetColor");
+	MarkNativeAsOptional("PbSetAngle");
+	MarkNativeAsOptional("PbSetVector");
+	MarkNativeAsOptional("PbSetVector2D");
+	MarkNativeAsOptional("PbAddInt");
+	MarkNativeAsOptional("PbAddFloat");
+	MarkNativeAsOptional("PbAddBool");
+	MarkNativeAsOptional("PbAddString");
+	MarkNativeAsOptional("PbAddColor");
+	MarkNativeAsOptional("PbAddAngle");
+	MarkNativeAsOptional("PbAddVector");
+	MarkNativeAsOptional("PbAddVector2D");
+	MarkNativeAsOptional("PbRemoveRepeatedFieldValue");
+	MarkNativeAsOptional("PbReadMessage");
+	MarkNativeAsOptional("PbReadRepeatedMessage");
+	MarkNativeAsOptional("PbAddMessage");
+	MarkNativeAsOptional("Protobuf.ReadInt");
+	MarkNativeAsOptional("Protobuf.ReadInt64");
+	MarkNativeAsOptional("Protobuf.ReadFloat");
+	MarkNativeAsOptional("Protobuf.ReadBool");
+	MarkNativeAsOptional("Protobuf.ReadString");
+	MarkNativeAsOptional("Protobuf.ReadColor");
+	MarkNativeAsOptional("Protobuf.ReadAngle");
+	MarkNativeAsOptional("Protobuf.ReadVector");
+	MarkNativeAsOptional("Protobuf.ReadVector2D");
+	MarkNativeAsOptional("Protobuf.GetRepeatedFieldCount");
+	MarkNativeAsOptional("Protobuf.SetInt");
+	MarkNativeAsOptional("Protobuf.SetInt64");
+	MarkNativeAsOptional("Protobuf.SetFloat");
+	MarkNativeAsOptional("Protobuf.SetBool");
+	MarkNativeAsOptional("Protobuf.SetString");
+	MarkNativeAsOptional("Protobuf.SetColor");
+	MarkNativeAsOptional("Protobuf.SetAngle");
+	MarkNativeAsOptional("Protobuf.SetVector");
+	MarkNativeAsOptional("Protobuf.SetVector2D");
+	MarkNativeAsOptional("Protobuf.AddInt");
+	MarkNativeAsOptional("Protobuf.AddInt64");
+	MarkNativeAsOptional("Protobuf.AddFloat");
+	MarkNativeAsOptional("Protobuf.AddBool");
+	MarkNativeAsOptional("Protobuf.AddString");
+	MarkNativeAsOptional("Protobuf.AddColor");
+	MarkNativeAsOptional("Protobuf.AddAngle");
+	MarkNativeAsOptional("Protobuf.AddVector");
+	MarkNativeAsOptional("Protobuf.AddVector2D");
+	MarkNativeAsOptional("Protobuf.RemoveRepeatedFieldValue");
+	MarkNativeAsOptional("Protobuf.ReadMessage");
+	MarkNativeAsOptional("Protobuf.ReadRepeatedMessage");
+	MarkNativeAsOptional("Protobuf.AddMessage");
+	VerifyCoreVersion();
+	return 0;
+}
+

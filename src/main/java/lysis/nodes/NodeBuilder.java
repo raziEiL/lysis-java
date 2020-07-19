@@ -41,6 +41,7 @@ import lysis.instructions.LPushGlobal;
 import lysis.instructions.LPushLocal;
 import lysis.instructions.LPushReg;
 import lysis.instructions.LPushStackAddress;
+import lysis.instructions.LShiftLeftConstant;
 import lysis.instructions.LStack;
 import lysis.instructions.LStackAddress;
 import lysis.instructions.LStackAdjust;
@@ -499,11 +500,21 @@ public class NodeBuilder {
 				block.add(binary);
 
 				// sdiv: PRI = ALT / PRI; ALT = ALT mod PRI
-				if (ins.spop() == SPOpcode.sdiv_alt) {
+				if (ins.spop() == SPOpcode.sdiv_alt || ins.spop() == SPOpcode.sdiv) {
 					binary = new DBinary(SPOpcode.sdiv_alt_mod, nodeLHS, nodeRHS);
 					block.stack().set(Register.Alt, binary);
 					block.add(binary);
 				}
+				break;
+			}
+			
+			case ShiftLeftConstant: {
+				LShiftLeftConstant ins = (LShiftLeftConstant) uins;
+				DConstant val = new DConstant(ins.val());
+				DBinary node = new DBinary(SPOpcode.shl, block.stack().reg(ins.reg()), val);
+				block.stack().set(ins.reg(), node);
+				block.add(val);
+				block.add(node);
 				break;
 			}
 

@@ -622,7 +622,7 @@ public class NodeAnalysis {
 
 				if (next.type() == NodeType.Call) {
 					DCall call = (DCall) next;
-					if (call.function().returnType().name().equals("String")) {
+					if (call.function().isStringReturn()) {
 						use.node().replaceOperand(use.index(), call);
 						return true;
 					}

@@ -1,0 +1,645 @@
+public PlVers:__version =
+{
+	version = 5,
+	filevers = "1.10.0.6484",
+	date = "04/21/2020",
+	time = "18:15:17"
+};
+new Float:NULL_VECTOR[3];
+new String:NULL_STRING[16];
+public Extension:__ext_core =
+{
+	name = "Core",
+	file = "core",
+	autoload = 0,
+	required = 0,
+};
+new MaxClients;
+public Plugin:myinfo =
+{
+	name = "Basic Chat",
+	description = "Basic Communication Commands",
+	author = "AlliedModders LLC",
+	version = "1.10.0.6484",
+	url = "http://www.sourcemod.net/"
+};
+new String:g_ColorNames[12][52] =
+{
+	"White",
+	"Red",
+	"Green",
+	"Blue",
+	"Yellow",
+	"Purple",
+	"Cyan",
+	"Orange",
+	"Pink",
+	"Olive",
+	"Lime",
+	"Violet"
+};
+new g_Colors[3][13] =
+{
+	{
+		255, 255, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255
+	},
+	{
+		255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0, 255
+	},
+	{
+		0, 255, 0, 0, 0, 255, 255, 255, 0, 255, 0, 255, 0
+	}
+};
+new ConVar:g_Cvar_Chatmode;
+new EngineVersion:g_GameEngine;
+void:SendDialogToOne(client, color, String:text[], any:_arg3)
+{
+	new String:message[400];
+	VFormat(message, 100, text[0], 4);
+	new KeyValues:kv = KeyValues.KeyValues("Stuff", "title", message);
+	KeyValues.SetColor(kv, "color", g_Colors[color][0], g_Colors[color][1], g_Colors[color][2], 255);
+	KeyValues.SetNum(kv, "level", 1);
+	KeyValues.SetNum(kv, "time", 10);
+	CreateDialog(client, kv, 0);
+	CloseHandle(kv);
+	kv = 0;
+	return 0;
+}
+
+void:SendPrivateChat(client, target, String:message[])
+{
+	if (client)
+	{
+		if (client != target)
+		{
+			if (g_GameEngine == 12)
+			{
+				PrintToChat(client, " \x01\x0B\x04%t: \x01%s", "Private say to", target, client, message[0]);
+			}
+			PrintToChat(client, "\x04%t: \x01%s", "Private say to", target, client, message[0]);
+		}
+	}
+	else
+	{
+		PrintToServer("(Private to %N) %N: %s", target, client, message[0]);
+	}
+	if (g_GameEngine == 12)
+	{
+		PrintToChat(target, " \x01\x0B\x04%t: \x01%s", "Private say to", target, client, message[0]);
+	}
+	else
+	{
+		PrintToChat(target, "\x04%t: \x01%s", "Private say to", target, client, message[0]);
+	}
+	LogAction(client, target, "\"%L\" triggered sm_psay to \"%L\" (text %s)", client, target, message[0]);
+	return 0;
+}
+
+void:SendPanelToAll(from, String:message[])
+{
+	new String:title[400];
+	Format(title, 64, "%N:", from);
+	ReplaceString(message[0], 192, "\n", "\n", true);
+	new Panel:mSayPanel = Panel.Panel(0);
+	Panel.SetTitle(mSayPanel, title, false);
+	Panel.DrawItem(mSayPanel, "", 8);
+	Panel.DrawText(mSayPanel, message[0]);
+	Panel.DrawItem(mSayPanel, "", 8);
+	Panel.CurrentKey.set(mSayPanel, GetMaxPageItems(Panel.Style.get(mSayPanel)));
+	Panel.DrawItem(mSayPanel, "Exit", 16);
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (IsClientInGame(i) && IsFakeClient(i))
+		{
+			Panel.Send(mSayPanel, i, 33, 10);
+		}
+		i++;
+	}
+	CloseHandle(mSayPanel);
+	mSayPanel = 0;
+	return 0;
+}
+
+void:ReplyToTargetError(client, reason)
+{
+	switch (reason)
+	{
+		case -7:
+		{
+			ReplyToCommand(client, "[SM] %t", 2492);
+		}
+		case -6:
+		{
+			ReplyToCommand(client, "[SM] %t", 2464);
+		}
+		case -5:
+		{
+			ReplyToCommand(client, "[SM] %t", 2436);
+		}
+		case -4:
+		{
+			ReplyToCommand(client, "[SM] %t", 2408);
+		}
+		case -3:
+		{
+			ReplyToCommand(client, "[SM] %t", 2376);
+		}
+		case -2:
+		{
+			ReplyToCommand(client, "[SM] %t", 2348);
+		}
+		case -1:
+		{
+			ReplyToCommand(client, "[SM] %t", 2316);
+		}
+		case 0:
+		{
+			ReplyToCommand(client, "[SM] %t", 2288);
+		}
+		default:
+		{
+		}
+	}
+	return 0;
+}
+
+FindTarget(client, String:target[], bool:nobots, bool:immunity)
+{
+	new String:target_name[256];
+	new target_list[1];
+	new target_count;
+	new bool:tn_is_ml;
+	new flags = 16;
+	if (nobots)
+	{
+		flags |= 32;
+	}
+	if (!immunity)
+	{
+		flags |= 8;
+	}
+	if (0 < (target_count = ProcessTargetString(target[0], client, target_list, 1, flags, target_name, 64, tn_is_ml)))
+	{
+		return target_list[0];
+	}
+	ReplyToTargetError(client, target_count);
+	return -1;
+}
+
+FindColor(String:color[])
+{
+	new i;
+	while (i < 13)
+	{
+		if (!(strcmp(color[0], g_ColorNames[i], false)))
+		{
+			return i;
+		}
+		i++;
+	}
+	return -1;
+}
+
+void:SendChatToAll(client, String:message[])
+{
+	new String:nameBuf[512];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (IsClientInGame(i) && IsFakeClient(i))
+		{
+		}
+		else
+		{
+			FormatActivitySource(client, i, nameBuf, 128);
+			if (g_GameEngine == 12)
+			{
+				PrintToChat(i, " \x01\x0B\x04%t: \x01%s", "Say all", nameBuf, message[0]);
+			}
+			else
+			{
+				PrintToChat(i, "\x04%t: \x01%s", "Say all", nameBuf, message[0]);
+			}
+		}
+		i++;
+	}
+	return 0;
+}
+
+void:DisplayCenterTextToAll(client, String:message[])
+{
+	new String:nameBuf[512];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (IsClientInGame(i) && IsFakeClient(i))
+		{
+		}
+		else
+		{
+			FormatActivitySource(client, i, nameBuf, 128);
+			PrintCenterText(i, "%s: %s", nameBuf, message[0]);
+		}
+		i++;
+	}
+	return 0;
+}
+
+void:SendChatToAdmins(from, String:message[])
+{
+	new fromAdmin = CheckCommandAccess(from, "sm_chat", 512, false);
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var2;
+		if (IsClientInGame(i) && (i != from && CheckCommandAccess(i, "sm_chat", 512, false)))
+		{
+			if (g_GameEngine == 12)
+			{
+				new var3;
+				if (fromAdmin)
+				{
+					var3 = 4312;
+				}
+				else
+				{
+					var3 = 4324;
+				}
+				PrintToChat(i, " \x01\x0B\x04%t: \x01%s", var3, from, message[0]);
+			}
+			new var4;
+			if (fromAdmin)
+			{
+				var4 = 4352;
+			}
+			else
+			{
+				var4 = 4364;
+			}
+			PrintToChat(i, "\x04%t: \x01%s", var4, from, message[0]);
+		}
+		i++;
+	}
+	return 0;
+}
+
+public Action:Command_SmChat(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_chat <message>");
+		return 3;
+	}
+	new String:text[768];
+	GetCmdArgString(text, 192);
+	SendChatToAdmins(client, text);
+	LogAction(client, -1, "\"%L\" triggered sm_chat (text %s)", client, text);
+	return 3;
+}
+
+public Action:Command_SmCsay(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_csay <message>");
+		return 3;
+	}
+	new String:text[768];
+	GetCmdArgString(text, 192);
+	DisplayCenterTextToAll(client, text);
+	LogAction(client, -1, "\"%L\" triggered sm_csay (text %s)", client, text);
+	return 3;
+}
+
+public Action:Command_SmHsay(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_hsay <message>");
+		return 3;
+	}
+	new String:text[768];
+	GetCmdArgString(text, 192);
+	new String:nameBuf[512];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (IsClientInGame(i) && IsFakeClient(i))
+		{
+		}
+		else
+		{
+			FormatActivitySource(client, i, nameBuf, 128);
+			PrintHintText(i, "%s: %s", nameBuf, text);
+		}
+		i++;
+	}
+	LogAction(client, -1, "\"%L\" triggered sm_hsay (text %s)", client, text);
+	return 3;
+}
+
+public Action:Command_SmMsay(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_msay <message>");
+		return 3;
+	}
+	new String:text[768];
+	GetCmdArgString(text, 192);
+	SendPanelToAll(client, text);
+	LogAction(client, -1, "\"%L\" triggered sm_msay (text %s)", client, text);
+	return 3;
+}
+
+public Action:Command_SmPsay(client, args)
+{
+	if (args < 2)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_psay <name or #userid> <message>");
+		return 3;
+	}
+	new String:text[768];
+	new String:arg[256];
+	new String:message[768];
+	GetCmdArgString(text, 192);
+	new len = BreakString(text, arg, 64);
+	BreakString(text[len], message, 192);
+	new target = FindTarget(client, arg, true, false);
+	if (target == -1)
+	{
+		return 3;
+	}
+	SendPrivateChat(client, target, message);
+	return 3;
+}
+
+public Action:Command_SmSay(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_say <message>");
+		return 3;
+	}
+	new String:text[768];
+	GetCmdArgString(text, 192);
+	SendChatToAll(client, text);
+	LogAction(client, -1, "\"%L\" triggered sm_say (text %s)", client, text);
+	return 3;
+}
+
+public Action:Command_SmTsay(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_tsay <message>");
+		return 3;
+	}
+	new String:text[768];
+	new String:colorStr[64];
+	GetCmdArgString(text, 192);
+	new len = BreakString(text, colorStr, 16);
+	new color = FindColor(colorStr);
+	new String:nameBuf[512];
+	if (color == -1)
+	{
+		color = 0;
+		len = 0;
+	}
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (IsClientInGame(i) && IsFakeClient(i))
+		{
+		}
+		else
+		{
+			FormatActivitySource(client, i, nameBuf, 128);
+			SendDialogToOne(i, color, "%s: %s", nameBuf, text[len]);
+		}
+		i++;
+	}
+	LogAction(client, -1, "\"%L\" triggered sm_tsay (text %s)", client, text);
+	return 3;
+}
+
+public Handler_DoNothing(Menu:menu, MenuAction:action, param1, param2)
+{
+	return 0;
+}
+
+public Action:OnClientSayCommand(client, String:command[], String:sArgs[])
+{
+	new startidx;
+	if (sArgs[0][startidx] != '@')
+	{
+		return 0;
+	}
+	startidx++;
+	if (strcmp(command[0], "say", false))
+	{
+		new var2;
+		if (strcmp(command[0], "say_team", false) && strcmp(command[0], "say_squad", false))
+		{
+			new var3;
+			if (CheckCommandAccess(client, "sm_chat", 512, false) && ConVar.BoolValue.get(g_Cvar_Chatmode))
+			{
+				return 0;
+			}
+			SendChatToAdmins(client, startidx + sArgs[0]);
+			LogAction(client, -1, "\"%L\" triggered sm_chat (text %s)", client, startidx + sArgs[0]);
+			return 4;
+		}
+		return 0;
+	}
+	if (sArgs[0][startidx] != '@')
+	{
+		if (CheckCommandAccess(client, "sm_say", 512, false))
+		{
+			SendChatToAll(client, startidx + sArgs[0]);
+			LogAction(client, -1, "\"%L\" triggered sm_say (text %s)", client, startidx + sArgs[0]);
+			return 4;
+		}
+		return 0;
+	}
+	startidx++;
+	if (sArgs[0][startidx] != '@')
+	{
+		if (CheckCommandAccess(client, "sm_psay", 512, false))
+		{
+			new String:arg[256];
+			new len = BreakString(startidx + sArgs[0], arg, 64);
+			new target = FindTarget(client, arg, true, false);
+			new var1;
+			if (target == -1 || len == -1)
+			{
+				return 4;
+			}
+			SendPrivateChat(client, target, len + startidx + sArgs[0]);
+			return 4;
+		}
+		return 0;
+	}
+	startidx++;
+	if (CheckCommandAccess(client, "sm_csay", 512, false))
+	{
+		DisplayCenterTextToAll(client, startidx + sArgs[0]);
+		LogAction(client, -1, "\"%L\" triggered sm_csay (text %s)", client, startidx + sArgs[0]);
+		return 4;
+	}
+	return 0;
+}
+
+public void:OnPluginStart()
+{
+	LoadTranslations("common.phrases");
+	g_GameEngine = GetEngineVersion();
+	g_Cvar_Chatmode = CreateConVar("sm_chat_mode", "1", "Allows player's to send messages to admin chat.", 0, true, 0.0, true, 1.0);
+	RegAdminCmd("sm_say", 29, 512, "sm_say <message> - sends message to all players", "", 0);
+	RegAdminCmd("sm_csay", 21, 512, "sm_csay <message> - sends centered message to all players", "", 0);
+	if (g_GameEngine != 5)
+	{
+		RegAdminCmd("sm_hsay", 23, 512, "sm_hsay <message> - sends hint message to all players", "", 0);
+	}
+	RegAdminCmd("sm_tsay", 31, 512, "sm_tsay [color] <message> - sends top-left message to all players", "", 0);
+	RegAdminCmd("sm_chat", 19, 512, "sm_chat <message> - sends message to admins", "", 0);
+	RegAdminCmd("sm_psay", 27, 512, "sm_psay <name or #userid> <message> - sends private message", "", 0);
+	RegAdminCmd("sm_msay", 25, 512, "sm_msay <message> - sends message as a menu panel", "", 0);
+	return 0;
+}
+
+public void:__ext_core_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetFeatureStatus");
+	MarkNativeAsOptional("RequireFeature");
+	MarkNativeAsOptional("AddCommandListener");
+	MarkNativeAsOptional("RemoveCommandListener");
+	MarkNativeAsOptional("BfWriteBool");
+	MarkNativeAsOptional("BfWriteByte");
+	MarkNativeAsOptional("BfWriteChar");
+	MarkNativeAsOptional("BfWriteShort");
+	MarkNativeAsOptional("BfWriteWord");
+	MarkNativeAsOptional("BfWriteNum");
+	MarkNativeAsOptional("BfWriteFloat");
+	MarkNativeAsOptional("BfWriteString");
+	MarkNativeAsOptional("BfWriteEntity");
+	MarkNativeAsOptional("BfWriteAngle");
+	MarkNativeAsOptional("BfWriteCoord");
+	MarkNativeAsOptional("BfWriteVecCoord");
+	MarkNativeAsOptional("BfWriteVecNormal");
+	MarkNativeAsOptional("BfWriteAngles");
+	MarkNativeAsOptional("BfReadBool");
+	MarkNativeAsOptional("BfReadByte");
+	MarkNativeAsOptional("BfReadChar");
+	MarkNativeAsOptional("BfReadShort");
+	MarkNativeAsOptional("BfReadWord");
+	MarkNativeAsOptional("BfReadNum");
+	MarkNativeAsOptional("BfReadFloat");
+	MarkNativeAsOptional("BfReadString");
+	MarkNativeAsOptional("BfReadEntity");
+	MarkNativeAsOptional("BfReadAngle");
+	MarkNativeAsOptional("BfReadCoord");
+	MarkNativeAsOptional("BfReadVecCoord");
+	MarkNativeAsOptional("BfReadVecNormal");
+	MarkNativeAsOptional("BfReadAngles");
+	MarkNativeAsOptional("BfGetNumBytesLeft");
+	MarkNativeAsOptional("BfWrite.WriteBool");
+	MarkNativeAsOptional("BfWrite.WriteByte");
+	MarkNativeAsOptional("BfWrite.WriteChar");
+	MarkNativeAsOptional("BfWrite.WriteShort");
+	MarkNativeAsOptional("BfWrite.WriteWord");
+	MarkNativeAsOptional("BfWrite.WriteNum");
+	MarkNativeAsOptional("BfWrite.WriteFloat");
+	MarkNativeAsOptional("BfWrite.WriteString");
+	MarkNativeAsOptional("BfWrite.WriteEntity");
+	MarkNativeAsOptional("BfWrite.WriteAngle");
+	MarkNativeAsOptional("BfWrite.WriteCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecNormal");
+	MarkNativeAsOptional("BfWrite.WriteAngles");
+	MarkNativeAsOptional("BfRead.ReadBool");
+	MarkNativeAsOptional("BfRead.ReadByte");
+	MarkNativeAsOptional("BfRead.ReadChar");
+	MarkNativeAsOptional("BfRead.ReadShort");
+	MarkNativeAsOptional("BfRead.ReadWord");
+	MarkNativeAsOptional("BfRead.ReadNum");
+	MarkNativeAsOptional("BfRead.ReadFloat");
+	MarkNativeAsOptional("BfRead.ReadString");
+	MarkNativeAsOptional("BfRead.ReadEntity");
+	MarkNativeAsOptional("BfRead.ReadAngle");
+	MarkNativeAsOptional("BfRead.ReadCoord");
+	MarkNativeAsOptional("BfRead.ReadVecCoord");
+	MarkNativeAsOptional("BfRead.ReadVecNormal");
+	MarkNativeAsOptional("BfRead.ReadAngles");
+	MarkNativeAsOptional("BfRead.BytesLeft.get");
+	MarkNativeAsOptional("PbReadInt");
+	MarkNativeAsOptional("PbReadFloat");
+	MarkNativeAsOptional("PbReadBool");
+	MarkNativeAsOptional("PbReadString");
+	MarkNativeAsOptional("PbReadColor");
+	MarkNativeAsOptional("PbReadAngle");
+	MarkNativeAsOptional("PbReadVector");
+	MarkNativeAsOptional("PbReadVector2D");
+	MarkNativeAsOptional("PbGetRepeatedFieldCount");
+	MarkNativeAsOptional("PbSetInt");
+	MarkNativeAsOptional("PbSetFloat");
+	MarkNativeAsOptional("PbSetBool");
+	MarkNativeAsOptional("PbSetString");
+	MarkNativeAsOptional("PbSetColor");
+	MarkNativeAsOptional("PbSetAngle");
+	MarkNativeAsOptional("PbSetVector");
+	MarkNativeAsOptional("PbSetVector2D");
+	MarkNativeAsOptional("PbAddInt");
+	MarkNativeAsOptional("PbAddFloat");
+	MarkNativeAsOptional("PbAddBool");
+	MarkNativeAsOptional("PbAddString");
+	MarkNativeAsOptional("PbAddColor");
+	MarkNativeAsOptional("PbAddAngle");
+	MarkNativeAsOptional("PbAddVector");
+	MarkNativeAsOptional("PbAddVector2D");
+	MarkNativeAsOptional("PbRemoveRepeatedFieldValue");
+	MarkNativeAsOptional("PbReadMessage");
+	MarkNativeAsOptional("PbReadRepeatedMessage");
+	MarkNativeAsOptional("PbAddMessage");
+	MarkNativeAsOptional("Protobuf.ReadInt");
+	MarkNativeAsOptional("Protobuf.ReadInt64");
+	MarkNativeAsOptional("Protobuf.ReadFloat");
+	MarkNativeAsOptional("Protobuf.ReadBool");
+	MarkNativeAsOptional("Protobuf.ReadString");
+	MarkNativeAsOptional("Protobuf.ReadColor");
+	MarkNativeAsOptional("Protobuf.ReadAngle");
+	MarkNativeAsOptional("Protobuf.ReadVector");
+	MarkNativeAsOptional("Protobuf.ReadVector2D");
+	MarkNativeAsOptional("Protobuf.GetRepeatedFieldCount");
+	MarkNativeAsOptional("Protobuf.SetInt");
+	MarkNativeAsOptional("Protobuf.SetInt64");
+	MarkNativeAsOptional("Protobuf.SetFloat");
+	MarkNativeAsOptional("Protobuf.SetBool");
+	MarkNativeAsOptional("Protobuf.SetString");
+	MarkNativeAsOptional("Protobuf.SetColor");
+	MarkNativeAsOptional("Protobuf.SetAngle");
+	MarkNativeAsOptional("Protobuf.SetVector");
+	MarkNativeAsOptional("Protobuf.SetVector2D");
+	MarkNativeAsOptional("Protobuf.AddInt");
+	MarkNativeAsOptional("Protobuf.AddInt64");
+	MarkNativeAsOptional("Protobuf.AddFloat");
+	MarkNativeAsOptional("Protobuf.AddBool");
+	MarkNativeAsOptional("Protobuf.AddString");
+	MarkNativeAsOptional("Protobuf.AddColor");
+	MarkNativeAsOptional("Protobuf.AddAngle");
+	MarkNativeAsOptional("Protobuf.AddVector");
+	MarkNativeAsOptional("Protobuf.AddVector2D");
+	MarkNativeAsOptional("Protobuf.RemoveRepeatedFieldValue");
+	MarkNativeAsOptional("Protobuf.ReadMessage");
+	MarkNativeAsOptional("Protobuf.ReadRepeatedMessage");
+	MarkNativeAsOptional("Protobuf.AddMessage");
+	VerifyCoreVersion();
+	return 0;
+}
+

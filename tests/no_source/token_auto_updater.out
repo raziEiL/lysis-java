@@ -58,32 +58,9 @@ public GetResult(_arg0)
 	if (strlen(_arg0) != 32)
 	{
 		sub_27bc(8);
-		LogToFile(3952, "%s%s", /* HEAP 192 */, _arg0);
-		sub_27bc(8);
-		SetFailState("[Token Auto Updater] %s%s", /* HEAP 192 */, _arg0);
-	}
-	else
-	{
-		if (3776/* ERROR unknown load Constant */)
-		{
-			if (!sub_b68(3776, _arg0, 1))
-			{
-				sub_2188();
-				strcopy(3776, 33, _arg0);
-				sub_27bc(10);
-				LogToFile(3952, /* HEAP 192 */);
-				SetToken(0);
-			}
-		}
-		sub_2188();
-		strcopy(3776, 33, _arg0);
-		sub_27bc(9);
-		LogToFile(3952, /* HEAP 192 */);
-		TAU_LIB_2();
-		return 0;
-	}
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "GetResult" (number 1)
 
 public HTTPComplete(_arg0, _arg1, _arg2, _arg3)
 {
@@ -94,12 +71,9 @@ public HTTPComplete(_arg0, _arg1, _arg2, _arg3)
 	else
 	{
 		sub_27bc(7);
-		LogToFile(3952, "%s(%d)", /* HEAP 192 */, _arg3);
-	}
-	CloseHandle(_arg0);
-	_arg0 = 0;
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "HTTPComplete" (number 2)
 
 public OnPluginStart()
 {
@@ -132,59 +106,9 @@ public OnPluginStart()
 	if (!LibraryExists("SteamWorks"))
 	{
 		sub_27bc(0);
-		LogToFile("token_auto_updater/tau.log", /* HEAP 192 */);
-		sub_27bc(0);
-		SetFailState("[Token Auto Updater] %s", /* HEAP 192 */);
-		return 0;
-	}
-	if (!LibraryExists("TAU_LIB"))
-	{
-		sub_27bc(1);
-		LogToFile("token_auto_updater/tau.log", /* HEAP 192 */);
-		sub_27bc(1);
-		SetFailState("[Token Auto Updater] %s", /* HEAP 192 */);
-		return 0;
-	}
-	if (TAU_LIB_VER() != 140)
-	{
-		sub_27bc(2);
-		LogToFile("token_auto_updater/tau.log", /* HEAP 192 */);
-		sub_27bc(2);
-		SetFailState("[Token Auto Updater] %s", /* HEAP 192 */);
-		return 0;
-	}
-	KeyValues.GetString(g_varfb4, "Location", 3912, 38, "NULL");
-	if (!(sub_b68(3912, "RU", 1)))
-	{
-		if (!(sub_b68(3912, "USA", 1)))
-		{
-			sub_27bc(3);
-			LogToFile("token_auto_updater/tau.log", "%s%s", /* HEAP 192 */, 3912);
-			sub_27bc(3);
-			SetFailState("[Token Auto Updater] %s%s", /* HEAP 192 */, 3912);
-			return 0;
-		}
-	}
-	KeyValues.GetString(g_varfb4, "Key", 3812, 100, 4536);
-	if (strlen(3812) != 30)
-	{
-		sub_27bc(4);
-		LogToFile("token_auto_updater/tau.log", /* HEAP 192 */);
-		sub_27bc(4);
-		SetFailState("[Token Auto Updater] %s", /* HEAP 192 */);
-		return 0;
-	}
-	g_varfb8 = KeyValues.GetNum(g_varfb4, "Mode", 0);
-	if (!0 <= g_varfb8 <= 2)
-	{
-		sub_27bc(5);
-		LogToFile("token_auto_updater/tau.log", "%s%d", /* HEAP 192 */, g_varfb8);
-		sub_27bc(5);
-		SetFailState("[Token Auto Updater] %s%d", /* HEAP 192 */, g_varfb8);
-		return 0;
-	}
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "OnPluginStart" (number 3)
 
 public SetToken()
 {
@@ -195,45 +119,9 @@ public SetToken()
 			TAU_LIB_1(3776);
 			CreateTimer(1065353216, 21, 0, 1);
 			sub_27bc(11);
-			LogToFile(3952, /* HEAP 192 */);
-		}
-		if (g_varfb8 < 2)
-		{
-			new var2 = 0;
-			KeyValues.GetString(g_varfb4, "Kick Message", var2, 256, 4536);
-			ReplaceString(var2, 256, "\n", "\n", 1);
-			new var3 = 1;
-			while (var3 <= MaxClients)
-			{
-				new var1;
-				if (IsClientConnected(var3) && !IsFakeClient(var3))
-				{
-					KickClient(var3, var2);
-				}
-				var3++;
-			}
-			if (g_varfb8)
-			{
-			}
-			else
-			{
-				sub_27bc(12);
-				LogToFile(3952, /* HEAP 192 */);
-				KeyValues.GetString(g_varfb4, "Restart Command", var2, 256, "sv_cheats 1; crash;");
-				ServerCommand(var2);
-			}
-		}
-		g_varfbc = 0;
-	}
-	else
-	{
-		g_varfc0 = 1;
-		TAU_LIB_1(3776);
-		sub_27bc(13);
-		LogToFile(3952, /* HEAP 192 */);
-	}
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "SetToken" (number 4)
 
 public SteamWorks_SteamServersConnectFailure(_arg0)
 {
@@ -252,37 +140,9 @@ public SteamWorks_SteamServersConnected()
 			FormatEx(3952, NULL_STRING, "token_auto_updater/%s.log", 3812 + 53);
 			3952[sub_b9c(3952, 58, 0)] = 95;
 			sub_27bc(6);
-			LogToFile(3952, /* HEAP 192 */);
-		}
-		if (!g_varfb0)
-		{
-			g_varfb0 = CreateTimer(1065353216, 19, 0, 1);
-		}
-		return 0;
-	}
-	new var1;
-	if (!g_varfc0 || g_varfbc)
-	{
-		new var2;
-		var2 = SteamWorks_CreateHTTPRequest(3, 3912);
-		SteamWorks_SetHTTPRequestRawPostBody(var2, "application/x-www-form-urlencoded", 3812, strlen(3812));
-		SteamWorks_SetHTTPRequestNetworkActivityTimeout(var2, 7);
-		SteamWorks_SetHTTPCallbacks(var2, 5, -1, -1, 0);
-		SteamWorks_SendHTTPRequest(var2);
-		if (g_varfb0)
-		{
-		}
-		else
-		{
-			g_varfb0 = CreateTimer(1092616192, 19, 0, 1);
-		}
-	}
-	else
-	{
-		sub_2188();
-	}
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "SteamWorks_SteamServersConnected" (number 6)
 
 public SteamWorks_SteamServersDisconnected(_arg0)
 {
@@ -295,9 +155,9 @@ public TimerGetNewToken()
 	TAU_LIB_2();
 	SteamWorks_SteamServersConnected();
 	sub_27bc(15);
-	LogToFile(3952, /* HEAP 192 */);
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "TimerGetNewToken" (number 8)
 
 public TimerRequestT()
 {
@@ -538,15 +398,9 @@ sub_25cc(_arg0)
 				g_varfbc = 1;
 				CreateTimer(GetRandomFloat(1108082688, 1110704128), 17, 0, 0);
 				sub_27bc(14);
-				LogToFile(3952, /* HEAP 192 */);
-			}
-		}
-		default:
-		{
-		}
-	}
-	return 0;
-}
+
+/* ERROR! Can't print expression: Heap */
+ function "sub_25cc" (number 17)
 
 sub_b9c(_arg0, _arg1, _arg2)
 {

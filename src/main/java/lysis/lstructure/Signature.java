@@ -2,18 +2,25 @@ package lysis.lstructure;
 
 import java.util.List;
 
+import lysis.types.rtti.RttiType;
+
 public class Signature {
 	protected String name_;
 	protected long tag_id_;
 	protected Tag tag_;
+	protected RttiType rtti_type_;
 	protected Argument[] args_;
 
 	public Signature(String name) {
 		name_ = name;
 	}
 
-	public Tag returnType() {
+	public Tag returnTag() {
 		return tag_;
+	}
+	
+	public RttiType returnType() {
+		return rtti_type_;
 	}
 
 	public long tag_id() {
@@ -42,5 +49,13 @@ public class Signature {
 
 	public void setArguments(List<Argument> from) {
 		args_ = from.toArray(new Argument[0]);
+	}
+	
+	public boolean isStringReturn() {
+		if (tag_ != null && tag_.isString())
+			return true;
+		if (rtti_type_ != null && rtti_type_.isString())
+			return true;
+		return false;
 	}
 }

@@ -1,0 +1,889 @@
+public PlVers:__version =
+{
+	version = 5,
+	filevers = "1.10.0.6484",
+	date = "04/21/2020",
+	time = "18:15:20"
+};
+new Float:NULL_VECTOR[3];
+new String:NULL_STRING[16];
+public Extension:__ext_core =
+{
+	name = "Core",
+	file = "core",
+	autoload = 0,
+	required = 0,
+};
+new MaxClients;
+new current_version[4] =
+{
+	1, 0, 0, 1409
+};
+public Plugin:myinfo =
+{
+	name = "SQL Admin Manager",
+	description = "Manages SQL admins",
+	author = "AlliedModders LLC",
+	version = "1.10.0.6484",
+	url = "http://www.sourcemod.net/"
+};
+bool:DoQuery(client, Database:db, String:query[])
+{
+	if (SQL_FastQuery(db, query[0], -1))
+	{
+		return 1;
+	}
+	new String:error[1024];
+	SQL_GetError(db, error, 255);
+	LogError("Query failed: %s", error);
+	LogError("Query dump: %s", query[0]);
+	ReplyToCommand(client, "[SM] %t", 10552);
+	return 0;
+}
+
+Action:DoError(client, Database:db, String:query[], String:msg[])
+{
+	new String:error[1024];
+	SQL_GetError(db, error, 255);
+	LogError("%s: %s", msg[0], error);
+	LogError("Query dump: %s", query[0]);
+	CloseHandle(db);
+	db = 0;
+	ReplyToCommand(client, "[SM] %t", 10612);
+	return 3;
+}
+
+Action:DoStmtError(client, Database:db, String:query[], String:error[], String:msg[])
+{
+	LogError("%s: %s", msg[0], error[0]);
+	LogError("Query dump: %s", query[0]);
+	CloseHandle(db);
+	db = 0;
+	ReplyToCommand(client, "[SM] %t", 10672);
+	return 3;
+}
+
+bool:StrEqual(String:str1[], String:str2[], bool:caseSensitive)
+{
+	return strcmp(str1[0], str2[0], caseSensitive) == 0;
+}
+
+ExplodeString(String:text[], String:split[], String:buffers[][], maxStrings, maxStringLength, bool:copyRemainder)
+{
+	new reloc_idx;
+	new idx;
+	new total;
+	new var1;
+	if (maxStrings < 1 || split[0])
+	{
+		return 0;
+	}
+	while ((idx = SplitString(reloc_idx + text[0], split[0], buffers[0][total], maxStringLength)) != -1)
+	{
+		reloc_idx = idx + reloc_idx;
+		total++;
+		if (maxStrings == total)
+		{
+			if (copyRemainder)
+			{
+				strcopy(buffers[0][total + -1], maxStringLength, reloc_idx - idx + text[0]);
+			}
+			return total;
+		}
+	}
+	total++;
+	strcopy(buffers[0][total], maxStringLength, reloc_idx + text[0]);
+	return total;
+}
+
+Database:Connect()
+{
+	new String:error[1024];
+	new Database:db;
+	if (SQL_CheckConfig("admins"))
+	{
+		db = SQL_Connect("admins", true, error, 255);
+	}
+	else
+	{
+		db = SQL_Connect("default", true, error, 255);
+	}
+	if (!db)
+	{
+		LogError("Could not connect to database: %s", error);
+	}
+	return db;
+}
+
+void:CreateMySQL(client, Database:db)
+{
+	new String:queries[][28] = {
+	};
+	new i;
+	while (i < 7)
+	{
+		if (!(DoQuery(client, db, queries[i])))
+		{
+			return 0;
+		}
+		i++;
+	}
+	new String:query[1024];
+	Format(query, 256, "INSERT INTO sm_config (cfg_key, cfg_value) VALUES ('admin_version', '1.0.0.%d') ON DUPLICATE KEY UPDATE cfg_value = '1.0.0.%d'", 1409, 1409);
+	if (DoQuery(client, db, query))
+	{
+		ReplyToCommand(client, "[SM] Admin tables have been created.");
+		return 0;
+	}
+	return 0;
+}
+
+void:CreateSQLite(client, Database:db)
+{
+	new String:queries[][28] = {
+	};
+	new i;
+	while (i < 7)
+	{
+		if (!(DoQuery(client, db, queries[i])))
+		{
+			return 0;
+		}
+		i++;
+	}
+	new String:query[1024];
+	Format(query, 256, "REPLACE INTO sm_config (cfg_key, cfg_value) VALUES ('admin_version', '1.0.0.%d')", 1409);
+	if (DoQuery(client, db, query))
+	{
+		ReplyToCommand(client, "[SM] Admin tables have been created.");
+		return 0;
+	}
+	return 0;
+}
+
+bool:GetUpdateVersion(client, Database:db, versions[4])
+{
+	new String:query[1024];
+	new DBResultSet:rs;
+	Format(query, 256, "SELECT cfg_value FROM sm_config WHERE cfg_key = 'admin_version'");
+	if ((rs = SQL_Query(db, query, -1)))
+	{
+		if (DBResultSet.FetchRow(rs))
+		{
+			new String:version_string[1024];
+			DBResultSet.FetchString(rs, 0, version_string, 255, 0);
+
+/* ERROR! null */
+ function "GetUpdateVersion" (number 8)
+
+void:UpdateSQLite(client, Database:db)
+{
+	new String:query[2048];
+	new DBResultSet:rs;
+	Format(query, 512, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sm_config'");
+	if ((rs = SQL_Query(db, query, -1)))
+	{
+		new bool:found = DBResultSet.FetchRow(rs);
+		CloseHandle(rs);
+		rs = 0;
+		new versions[4];
+		if (found)
+		{
+			if (!(GetUpdateVersion(client, db, versions)))
+			{
+				return 0;
+			}
+		}
+		if (versions[3] < 1409)
+		{
+			new String:queries[][32] = {
+			};
+			new i;
+			while (i < 8)
+			{
+				if (!(DoQuery(client, db, queries[i])))
+				{
+					return 0;
+				}
+				i++;
+			}
+			Format(query, 512, "REPLACE INTO sm_config (cfg_key, cfg_value) VALUES ('admin_version', '1.0.0.%d')", 1409);
+			if (DoQuery(client, db, query))
+			{
+				versions[3] = 1409;
+			}
+			return 0;
+		}
+		ReplyToCommand(client, "[SM] Your tables are now up to date.");
+		return 0;
+	}
+	DoError(client, db, query, "Table lookup query failed");
+	return 0;
+}
+
+void:UpdateMySQL(client, Database:db)
+{
+	new String:query[2048];
+	new DBResultSet:rs;
+	Format(query, 512, "SHOW TABLES");
+	if ((rs = SQL_Query(db, query, -1)))
+	{
+		new String:table[256];
+		new bool:found;
+		while (DBResultSet.FetchRow(rs))
+		{
+			DBResultSet.FetchString(rs, 0, table, 64, 0);
+			if (strcmp(table, "sm_config", true))
+			{
+			}
+			else
+			{
+				found = true;
+			}
+		}
+		CloseHandle(rs);
+		rs = 0;
+		new versions[4];
+		new var1;
+		if (found && GetUpdateVersion(client, db, versions))
+		{
+			return 0;
+		}
+		if (versions[3] < 1409)
+		{
+			new String:queries[][24] = {
+			};
+			new i;
+			while (i < 6)
+			{
+				if (!(DoQuery(client, db, queries[i])))
+				{
+					return 0;
+				}
+				i++;
+			}
+			new String:upgr[192];
+			Format(upgr, 48, "1.0.0.%d", 1409);
+			Format(query, 512, "INSERT INTO sm_config (cfg_key, cfg_value) VALUES ('admin_version', '%s') ON DUPLICATE KEY UPDATE cfg_value = '%s'", upgr, upgr);
+			if (DoQuery(client, db, query))
+			{
+				versions[3] = 1409;
+			}
+			return 0;
+		}
+		ReplyToCommand(client, "[SM] Your tables are now up to date.");
+		return 0;
+	}
+	DoError(client, db, query, "Table lookup query failed");
+	return 0;
+}
+
+public Action:Command_AddAdmin(client, args)
+{
+	if (args < 4)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_sql_addadmin <alias> <authtype> <identity> <flags> [immunity] [password]");
+		ReplyToCommand(client, "[SM] %t", 10024);
+		return 3;
+	}
+	new String:authtype[64];
+	GetCmdArg(2, authtype, 16);
+	new var1;
+	if (StrEqual(authtype, "steam", true) && StrEqual(authtype, "ip", true) && StrEqual(authtype, "name", true))
+	{
+		ReplyToCommand(client, "[SM] %t", 10072);
+		return 3;
+	}
+	new immunity;
+	if (args >= 5)
+	{
+		new String:arg5[128];
+		GetCmdArg(5, arg5, 32);
+		if (!(StringToIntEx(arg5, immunity, 10)))
+		{
+			ReplyToCommand(client, "[SM] %t", 10100);
+			return 3;
+		}
+	}
+	new String:identity[272];
+	new String:safe_identity[560];
+	GetCmdArg(3, identity, 65);
+	new String:query[1024];
+	new Database:db = Connect();
+	if (db)
+	{
+		Database.Escape(db, identity, safe_identity, 140, 0);
+		new DBResultSet:rs;
+		Format(query, 256, "SELECT id FROM sm_admins WHERE authtype = '%s' AND identity = '%s'", authtype, identity);
+		if ((rs = SQL_Query(db, query, -1)))
+		{
+			if (0 < DBResultSet.RowCount.get(rs))
+			{
+				ReplyToCommand(client, "[SM] %t", 10268);
+				CloseHandle(rs);
+				rs = 0;
+				CloseHandle(db);
+				db = 0;
+				return 3;
+			}
+			CloseHandle(rs);
+			rs = 0;
+			new String:alias[256];
+			new String:safe_alias[560];
+			GetCmdArg(1, alias, 64);
+			Database.Escape(db, alias, safe_alias, 140, 0);
+			new String:flags[128];
+			new String:safe_flags[256];
+			GetCmdArg(4, flags, 30);
+			Database.Escape(db, flags, safe_flags, 64, 0);
+			new String:password[128];
+			new String:safe_password[320];
+			if (args >= 6)
+			{
+				GetCmdArg(6, password, 32);
+				Database.Escape(db, password, safe_password, 80, 0);
+			}
+			else
+			{
+				safe_password[0] = '\x00';
+			}
+			new len = Format(query, 256, "INSERT INTO sm_admins (authtype, identity, password, flags, name, immunity) VALUES");
+			if (safe_password[0])
+			{
+				len = Format(query[len], 256 - len, " ('%s', '%s', '%s', '%s', '%s', %d)", authtype, safe_identity, safe_password, safe_flags, safe_alias, immunity) + len;
+			}
+			else
+			{
+				len = Format(query[len], 256 - len, " ('%s', '%s', NULL, '%s', '%s', %d)", authtype, safe_identity, safe_flags, safe_alias, immunity) + len;
+			}
+			if (SQL_FastQuery(db, query, -1))
+			{
+				ReplyToCommand(client, "[SM] %t", 10492);
+				CloseHandle(db);
+				db = 0;
+				return 3;
+			}
+			return DoError(client, db, query, "Admin insertion query failed");
+		}
+		return DoError(client, db, query, "Admin retrieval query failed");
+	}
+	ReplyToCommand(client, "[SM] %t", 10128);
+	return 3;
+}
+
+public Action:Command_AddGroup(client, args)
+{
+	if (args < 2)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_sql_addgroup <name> <flags> [immunity]");
+		return 3;
+	}
+	new immunity;
+	if (args >= 3)
+	{
+		new String:arg3[128];
+		GetCmdArg(3, arg3, 32);
+		if (!(StringToIntEx(arg3, immunity, 10)))
+		{
+			ReplyToCommand(client, "[SM] %t", 9148);
+			return 3;
+		}
+	}
+	new Database:db = Connect();
+	if (db)
+	{
+		new String:name[256];
+		new String:safe_name[256];
+		GetCmdArg(1, name, 64);
+		Database.Escape(db, name, safe_name, 64, 0);
+		new DBResultSet:rs;
+		new String:query[1024];
+		Format(query, 256, "SELECT id FROM sm_groups WHERE name = '%s'", safe_name);
+		if ((rs = SQL_Query(db, query, -1)))
+		{
+			if (0 < DBResultSet.RowCount.get(rs))
+			{
+				ReplyToCommand(client, "[SM] %t", 9292);
+				CloseHandle(rs);
+				rs = 0;
+				CloseHandle(db);
+				db = 0;
+				return 3;
+			}
+			CloseHandle(rs);
+			rs = 0;
+			new String:flags[128];
+			new String:safe_flags[256];
+			GetCmdArg(2, flags, 64);
+			Database.Escape(db, flags, safe_flags, 64, 0);
+			Format(query, 256, "INSERT INTO sm_groups (flags, name, immunity_level) VALUES ('%s', '%s', '%d')", safe_flags, safe_name, immunity);
+			if (SQL_FastQuery(db, query, -1))
+			{
+				ReplyToCommand(client, "[SM] %t", 9440);
+				CloseHandle(db);
+				db = 0;
+				return 3;
+			}
+			return DoError(client, db, query, "Group insertion query failed");
+		}
+		return DoError(client, db, query, "Group retrieval query failed");
+	}
+	ReplyToCommand(client, "[SM] %t", 9176);
+	return 3;
+}
+
+public Action:Command_CreateTables(args)
+{
+	new client;
+	new Database:db = Connect();
+	if (db)
+	{
+		new String:ident[64];
+		DBDriver.GetIdentifier(Database.Driver.get(db), ident, 16);
+		if (strcmp(ident, "mysql", true))
+		{
+			if (strcmp(ident, "sqlite", true))
+			{
+				ReplyToCommand(client, "[SM] Unknown driver type '%s', cannot create tables.", ident);
+			}
+			CreateSQLite(client, db);
+		}
+		else
+		{
+			CreateMySQL(client, db);
+		}
+		CloseHandle(db);
+		db = 0;
+		return 3;
+	}
+	ReplyToCommand(client, "[SM] %t", 5708);
+	return 3;
+}
+
+public Action:Command_DelAdmin(client, args)
+{
+	if (args < 2)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_sql_deladmin <authtype> <identity>");
+		ReplyToCommand(client, "[SM] %t", 9516);
+		return 3;
+	}
+	new String:authtype[64];
+	GetCmdArg(1, authtype, 16);
+	new var1;
+	if (StrEqual(authtype, "steam", true) && StrEqual(authtype, "ip", true) && StrEqual(authtype, "name", true))
+	{
+		ReplyToCommand(client, "[SM] %t", 9564);
+		return 3;
+	}
+	new Database:db = Connect();
+	if (db)
+	{
+		new String:identity[272];
+		new String:safe_identity[560];
+		GetCmdArg(2, identity, 65);
+		Database.Escape(db, identity, safe_identity, 140, 0);
+		new String:query[1024];
+		Format(query, 255, "SELECT id FROM sm_admins WHERE authtype = '%s' AND identity = '%s'", authtype, safe_identity);
+		new DBResultSet:rs;
+		if ((rs = SQL_Query(db, query, -1)))
+		{
+			if (DBResultSet.FetchRow(rs))
+			{
+				new id = DBResultSet.FetchInt(rs, 0, 0);
+				CloseHandle(rs);
+				rs = 0;
+				Format(query, 255, "DELETE FROM sm_admins_groups WHERE admin_id = %d", id);
+				if (SQL_FastQuery(db, query, -1))
+				{
+					Format(query, 255, "DELETE FROM sm_admins WHERE id = %d", id);
+					if (SQL_FastQuery(db, query, -1))
+					{
+						CloseHandle(db);
+						db = 0;
+						ReplyToCommand(client, "[SM] %t", 9908);
+						return 3;
+					}
+					return DoError(client, db, query, "Admin deletion query failed");
+				}
+				return DoError(client, db, query, "Admin group deletion query failed");
+			}
+			ReplyToCommand(client, "[SM] %t", 9728);
+			CloseHandle(rs);
+			rs = 0;
+			CloseHandle(db);
+			db = 0;
+			return 3;
+		}
+		CloseHandle(db);
+		db = 0;
+		return DoError(client, db, query, "Admin lookup query failed");
+	}
+	ReplyToCommand(client, "[SM] %t", 9592);
+	return 3;
+}
+
+public Action:Command_DelGroup(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_sql_delgroup <name>");
+		return 3;
+	}
+	new Database:db = Connect();
+	if (db)
+	{
+		new String:name[320];
+		new String:safe_name[720];
+		GetCmdArgString(name, 80);
+		new len = strlen(name);
+		new var2;
+		if (len > 1 && (name[0] == '"' && name[len + -1] == '"'))
+		{
+			len--;
+			name[len] = '\x00';
+			Database.Escape(db, name[0], safe_name, 180, 0);
+		}
+		else
+		{
+			Database.Escape(db, name, safe_name, 180, 0);
+		}
+		new String:query[1024];
+		new DBResultSet:rs;
+		Format(query, 256, "SELECT id FROM sm_groups WHERE name = '%s'", safe_name);
+		if ((rs = SQL_Query(db, query, -1)))
+		{
+			if (DBResultSet.FetchRow(rs))
+			{
+				new id = DBResultSet.FetchInt(rs, 0, 0);
+				CloseHandle(rs);
+				rs = 0;
+				Format(query, 256, "DELETE FROM sm_admins_groups WHERE group_id = %d", id);
+				if (SQL_FastQuery(db, query, -1))
+				{
+					Format(query, 256, "DELETE FROM sm_group_overrides WHERE group_id = %d", id);
+					if (SQL_FastQuery(db, query, -1))
+					{
+						Format(query, 256, "DELETE FROM sm_group_immunity WHERE group_id = %d OR other_id = %d", id, id);
+						if (SQL_FastQuery(db, query, -1))
+						{
+							Format(query, 256, "DELETE FROM sm_groups WHERE id = %d", id);
+							if (SQL_FastQuery(db, query, -1))
+							{
+								ReplyToCommand(client, "[SM] %t", 9064);
+								CloseHandle(db);
+								db = 0;
+								return 3;
+							}
+							return DoError(client, db, query, "Group deletion query failed");
+						}
+						return DoError(client, db, query, "Group immunity deletion query failed");
+					}
+					return DoError(client, db, query, "Group override deletion query failed");
+				}
+				return DoError(client, db, query, "Admin group deletion query failed");
+			}
+			ReplyToCommand(client, "[SM] %t", 8684);
+			CloseHandle(rs);
+			rs = 0;
+			CloseHandle(db);
+			db = 0;
+			return 3;
+		}
+		return DoError(client, db, query, "Group retrieval query failed");
+	}
+	ReplyToCommand(client, "[SM] %t", 8568);
+	return 3;
+}
+
+public Action:Command_SetAdminGroups(client, args)
+{
+	if (args < 2)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_sql_setadmingroups <authtype> <identity> [group1] ... [group N]");
+		return 3;
+	}
+	new String:authtype[64];
+	GetCmdArg(1, authtype, 16);
+	new var1;
+	if (StrEqual(authtype, "steam", true) && StrEqual(authtype, "ip", true) && StrEqual(authtype, "name", true))
+	{
+		ReplyToCommand(client, "[SM] %t", 7908);
+		return 3;
+	}
+	new Database:db = Connect();
+	if (db)
+	{
+		new String:identity[272];
+		new String:safe_identity[560];
+		GetCmdArg(2, identity, 65);
+		Database.Escape(db, identity, safe_identity, 140, 0);
+		new String:query[1024];
+		Format(query, 255, "SELECT id FROM sm_admins WHERE authtype = '%s' AND identity = '%s'", authtype, safe_identity);
+		new DBResultSet:rs;
+		if ((rs = SQL_Query(db, query, -1)))
+		{
+			if (DBResultSet.FetchRow(rs))
+			{
+				new id = DBResultSet.FetchInt(rs, 0, 0);
+				CloseHandle(rs);
+				rs = 0;
+				Format(query, 255, "DELETE FROM sm_admins_groups WHERE admin_id = %d", id);
+				if (SQL_FastQuery(db, query, -1))
+				{
+					if (args < 3)
+					{
+						CloseHandle(db);
+						db = 0;
+						ReplyToCommand(client, "[SM] %t", 8188);
+						return 3;
+					}
+					new String:error[1024];
+					new DBStatement:hAddQuery;
+					new DBStatement:hFindQuery;
+					Format(query, 255, "SELECT id FROM sm_groups WHERE name = ?");
+					if ((hFindQuery = SQL_PrepareQuery(db, query, error, 256)))
+					{
+						Format(query, 255, "INSERT INTO sm_admins_groups (admin_id, group_id, inherit_order) VALUES (%d, ?, ?)", id);
+						if ((hAddQuery = SQL_PrepareQuery(db, query, error, 256)))
+						{
+							new String:name[320];
+							new inherit_order;
+							new i = 3;
+							while (i <= args)
+							{
+								GetCmdArg(i, name, 80);
+								DBStatement.BindString(hFindQuery, 0, name, false);
+								new var2;
+								if (SQL_Execute(hFindQuery) && SQL_FetchRow(hFindQuery))
+								{
+									ReplyToCommand(client, "[SM] %t", "SQL Group X not found", name);
+								}
+								else
+								{
+									new gid = SQL_FetchInt(hFindQuery, 0, 0);
+									DBStatement.BindInt(hAddQuery, 0, gid, true);
+									inherit_order++;
+									DBStatement.BindInt(hAddQuery, 1, inherit_order, true);
+									if (SQL_Execute(hAddQuery))
+									{
+									}
+									else
+									{
+										ReplyToCommand(client, "[SM] %t", "SQL Group X failed to bind", name);
+										inherit_order--;
+									}
+								}
+								i++;
+							}
+							CloseHandle(hAddQuery);
+							hAddQuery = 0;
+							CloseHandle(hFindQuery);
+							hFindQuery = 0;
+							CloseHandle(db);
+							db = 0;
+							if (inherit_order == 1)
+							{
+								ReplyToCommand(client, "[SM] %t", 8472);
+							}
+							else
+							{
+								if (inherit_order > 1)
+								{
+									ReplyToCommand(client, "[SM] %t", "Added groups to user", inherit_order);
+								}
+							}
+							return 3;
+						}
+						CloseHandle(hFindQuery);
+						hFindQuery = 0;
+						return DoStmtError(client, db, query, error, "Add admin group prepare failed");
+					}
+					return DoStmtError(client, db, query, error, "Group search prepare failed");
+				}
+				return DoError(client, db, query, "Admin group deletion query failed");
+			}
+			ReplyToCommand(client, "[SM] %t", 8072);
+			CloseHandle(rs);
+			rs = 0;
+			CloseHandle(db);
+			db = 0;
+			return 3;
+		}
+		return DoError(client, db, query, "Admin lookup query failed");
+	}
+	ReplyToCommand(client, "[SM] %t", 7936);
+	return 3;
+}
+
+public Action:Command_UpdateTables(args)
+{
+	new client;
+	new Database:db = Connect();
+	if (db)
+	{
+		new String:ident[64];
+		DBDriver.GetIdentifier(Database.Driver.get(db), ident, 16);
+		if (strcmp(ident, "mysql", true))
+		{
+			if (strcmp(ident, "sqlite", true))
+			{
+				ReplyToCommand(client, "[SM] Unknown driver type, cannot upgrade.");
+			}
+			UpdateSQLite(client, db);
+		}
+		else
+		{
+			UpdateMySQL(client, db);
+		}
+		CloseHandle(db);
+		db = 0;
+		return 3;
+	}
+	ReplyToCommand(client, "[SM] %t", 7708);
+	return 3;
+}
+
+public void:OnPluginStart()
+{
+	LoadTranslations("common.phrases");
+	LoadTranslations("sqladmins.phrases");
+	RegAdminCmd("sm_sql_addadmin", 23, 16384, "Adds an admin to the SQL database", "", 0);
+	RegAdminCmd("sm_sql_deladmin", 29, 16384, "Removes an admin from the SQL database", "", 0);
+	RegAdminCmd("sm_sql_addgroup", 25, 16384, "Adds a group to the SQL database", "", 0);
+	RegAdminCmd("sm_sql_delgroup", 31, 16384, "Removes a group from the SQL database", "", 0);
+	RegAdminCmd("sm_sql_setadmingroups", 33, 16384, "Sets an admin's groups in the SQL database", "", 0);
+	RegServerCmd("sm_create_adm_tables", 27, "", 0);
+	RegServerCmd("sm_update_adm_tables", 35, "", 0);
+	return 0;
+}
+
+public void:__ext_core_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetFeatureStatus");
+	MarkNativeAsOptional("RequireFeature");
+	MarkNativeAsOptional("AddCommandListener");
+	MarkNativeAsOptional("RemoveCommandListener");
+	MarkNativeAsOptional("BfWriteBool");
+	MarkNativeAsOptional("BfWriteByte");
+	MarkNativeAsOptional("BfWriteChar");
+	MarkNativeAsOptional("BfWriteShort");
+	MarkNativeAsOptional("BfWriteWord");
+	MarkNativeAsOptional("BfWriteNum");
+	MarkNativeAsOptional("BfWriteFloat");
+	MarkNativeAsOptional("BfWriteString");
+	MarkNativeAsOptional("BfWriteEntity");
+	MarkNativeAsOptional("BfWriteAngle");
+	MarkNativeAsOptional("BfWriteCoord");
+	MarkNativeAsOptional("BfWriteVecCoord");
+	MarkNativeAsOptional("BfWriteVecNormal");
+	MarkNativeAsOptional("BfWriteAngles");
+	MarkNativeAsOptional("BfReadBool");
+	MarkNativeAsOptional("BfReadByte");
+	MarkNativeAsOptional("BfReadChar");
+	MarkNativeAsOptional("BfReadShort");
+	MarkNativeAsOptional("BfReadWord");
+	MarkNativeAsOptional("BfReadNum");
+	MarkNativeAsOptional("BfReadFloat");
+	MarkNativeAsOptional("BfReadString");
+	MarkNativeAsOptional("BfReadEntity");
+	MarkNativeAsOptional("BfReadAngle");
+	MarkNativeAsOptional("BfReadCoord");
+	MarkNativeAsOptional("BfReadVecCoord");
+	MarkNativeAsOptional("BfReadVecNormal");
+	MarkNativeAsOptional("BfReadAngles");
+	MarkNativeAsOptional("BfGetNumBytesLeft");
+	MarkNativeAsOptional("BfWrite.WriteBool");
+	MarkNativeAsOptional("BfWrite.WriteByte");
+	MarkNativeAsOptional("BfWrite.WriteChar");
+	MarkNativeAsOptional("BfWrite.WriteShort");
+	MarkNativeAsOptional("BfWrite.WriteWord");
+	MarkNativeAsOptional("BfWrite.WriteNum");
+	MarkNativeAsOptional("BfWrite.WriteFloat");
+	MarkNativeAsOptional("BfWrite.WriteString");
+	MarkNativeAsOptional("BfWrite.WriteEntity");
+	MarkNativeAsOptional("BfWrite.WriteAngle");
+	MarkNativeAsOptional("BfWrite.WriteCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecNormal");
+	MarkNativeAsOptional("BfWrite.WriteAngles");
+	MarkNativeAsOptional("BfRead.ReadBool");
+	MarkNativeAsOptional("BfRead.ReadByte");
+	MarkNativeAsOptional("BfRead.ReadChar");
+	MarkNativeAsOptional("BfRead.ReadShort");
+	MarkNativeAsOptional("BfRead.ReadWord");
+	MarkNativeAsOptional("BfRead.ReadNum");
+	MarkNativeAsOptional("BfRead.ReadFloat");
+	MarkNativeAsOptional("BfRead.ReadString");
+	MarkNativeAsOptional("BfRead.ReadEntity");
+	MarkNativeAsOptional("BfRead.ReadAngle");
+	MarkNativeAsOptional("BfRead.ReadCoord");
+	MarkNativeAsOptional("BfRead.ReadVecCoord");
+	MarkNativeAsOptional("BfRead.ReadVecNormal");
+	MarkNativeAsOptional("BfRead.ReadAngles");
+	MarkNativeAsOptional("BfRead.BytesLeft.get");
+	MarkNativeAsOptional("PbReadInt");
+	MarkNativeAsOptional("PbReadFloat");
+	MarkNativeAsOptional("PbReadBool");
+	MarkNativeAsOptional("PbReadString");
+	MarkNativeAsOptional("PbReadColor");
+	MarkNativeAsOptional("PbReadAngle");
+	MarkNativeAsOptional("PbReadVector");
+	MarkNativeAsOptional("PbReadVector2D");
+	MarkNativeAsOptional("PbGetRepeatedFieldCount");
+	MarkNativeAsOptional("PbSetInt");
+	MarkNativeAsOptional("PbSetFloat");
+	MarkNativeAsOptional("PbSetBool");
+	MarkNativeAsOptional("PbSetString");
+	MarkNativeAsOptional("PbSetColor");
+	MarkNativeAsOptional("PbSetAngle");
+	MarkNativeAsOptional("PbSetVector");
+	MarkNativeAsOptional("PbSetVector2D");
+	MarkNativeAsOptional("PbAddInt");
+	MarkNativeAsOptional("PbAddFloat");
+	MarkNativeAsOptional("PbAddBool");
+	MarkNativeAsOptional("PbAddString");
+	MarkNativeAsOptional("PbAddColor");
+	MarkNativeAsOptional("PbAddAngle");
+	MarkNativeAsOptional("PbAddVector");
+	MarkNativeAsOptional("PbAddVector2D");
+	MarkNativeAsOptional("PbRemoveRepeatedFieldValue");
+	MarkNativeAsOptional("PbReadMessage");
+	MarkNativeAsOptional("PbReadRepeatedMessage");
+	MarkNativeAsOptional("PbAddMessage");
+	MarkNativeAsOptional("Protobuf.ReadInt");
+	MarkNativeAsOptional("Protobuf.ReadInt64");
+	MarkNativeAsOptional("Protobuf.ReadFloat");
+	MarkNativeAsOptional("Protobuf.ReadBool");
+	MarkNativeAsOptional("Protobuf.ReadString");
+	MarkNativeAsOptional("Protobuf.ReadColor");
+	MarkNativeAsOptional("Protobuf.ReadAngle");
+	MarkNativeAsOptional("Protobuf.ReadVector");
+	MarkNativeAsOptional("Protobuf.ReadVector2D");
+	MarkNativeAsOptional("Protobuf.GetRepeatedFieldCount");
+	MarkNativeAsOptional("Protobuf.SetInt");
+	MarkNativeAsOptional("Protobuf.SetInt64");
+	MarkNativeAsOptional("Protobuf.SetFloat");
+	MarkNativeAsOptional("Protobuf.SetBool");
+	MarkNativeAsOptional("Protobuf.SetString");
+	MarkNativeAsOptional("Protobuf.SetColor");
+	MarkNativeAsOptional("Protobuf.SetAngle");
+	MarkNativeAsOptional("Protobuf.SetVector");
+	MarkNativeAsOptional("Protobuf.SetVector2D");
+	MarkNativeAsOptional("Protobuf.AddInt");
+	MarkNativeAsOptional("Protobuf.AddInt64");
+	MarkNativeAsOptional("Protobuf.AddFloat");
+	MarkNativeAsOptional("Protobuf.AddBool");
+	MarkNativeAsOptional("Protobuf.AddString");
+	MarkNativeAsOptional("Protobuf.AddColor");
+	MarkNativeAsOptional("Protobuf.AddAngle");
+	MarkNativeAsOptional("Protobuf.AddVector");
+	MarkNativeAsOptional("Protobuf.AddVector2D");
+	MarkNativeAsOptional("Protobuf.RemoveRepeatedFieldValue");
+	MarkNativeAsOptional("Protobuf.ReadMessage");
+	MarkNativeAsOptional("Protobuf.ReadRepeatedMessage");
+	MarkNativeAsOptional("Protobuf.AddMessage");
+	VerifyCoreVersion();
+	return 0;
+}
+

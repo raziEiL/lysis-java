@@ -57,8 +57,15 @@ public class ForwardTypePropagation extends NodeVisitor {
 			TypeUnit tu = TypeUnit.FromVariable(var);
 			assert (tu != null);
 			local.addType(new TypeUnit(tu));
-			if (local.value() != null && local.value().type() == NodeType.Constant && var.tag().name().equals("Float"))
-				local.value().addType(TypeUnit.FromTag(var.tag()));
+			if (local.value() != null && local.value().type() == NodeType.Constant && var.isFloat()) {
+				// Assign the raw non-array and non-reference type to the constant. 
+				TypeUnit rawType = null;
+				if (var.tag() != null)
+					rawType = TypeUnit.FromTag(var.tag());
+				if (var.rttiType() != null)
+					rawType = TypeUnit.FromType(var.rttiType());
+				local.value().addType(rawType);
+			}
 		}
 	}
 
@@ -96,7 +103,7 @@ public class ForwardTypePropagation extends NodeVisitor {
 				return;
 			// We just assume the one right before the variadic argument is the format
 			// string.
-			if (!signature.args()[signature.args().length - 2].tag().name().equals("String"))
+			if (!signature.args()[signature.args().length - 2].isString())
 				return;
 			// Are there any variadic arguments passed to the native?
 			if (call.numOperands() == (signature.args().length - 2))
@@ -112,7 +119,7 @@ public class ForwardTypePropagation extends NodeVisitor {
 			// We just assume the one right before the variadic argument is the format
 			// string.
 			Argument formatArg = signature.args()[signature.args().length - 1];
-			if (formatArg.tag() == null || !formatArg.tag().name().equals("String"))
+			if (!formatArg.isString())
 				return;
 			formatIndex = signature.args().length - 1;
 		}

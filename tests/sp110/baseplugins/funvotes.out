@@ -1,0 +1,1066 @@
+public PlVers:__version =
+{
+	version = 5,
+	filevers = "1.10.0.6484",
+	date = "04/21/2020",
+	time = "18:15:17"
+};
+new Float:NULL_VECTOR[3];
+new String:NULL_STRING[16];
+public Extension:__ext_core =
+{
+	name = "Core",
+	file = "core",
+	autoload = 0,
+	required = 0,
+};
+new MaxClients;
+public Extension:__ext_sdktools =
+{
+	name = "SDKTools",
+	file = "sdktools.ext",
+	autoload = 1,
+	required = 1,
+};
+public Extension:__ext_topmenus =
+{
+	name = "TopMenus",
+	file = "topmenus.ext",
+	autoload = 1,
+	required = 0,
+};
+public SharedPlugin:__pl_adminmenu =
+{
+	name = "adminmenu",
+	file = "adminmenu.smx",
+	required = 0,
+};
+public Plugin:myinfo =
+{
+	name = "Fun Votes",
+	description = "Fun Vote Commands",
+	author = "AlliedModders LLC",
+	version = "1.10.0.6484",
+	url = "http://www.sourcemod.net/"
+};
+new Menu:g_hVoteMenu;
+new ConVar:g_Cvar_Limits[5];
+new ConVar:g_Cvar_Gravity;
+new ConVar:g_Cvar_Alltalk;
+new ConVar:g_Cvar_FF;
+new voteType:g_voteType;
+new g_voteTarget;
+new String:g_voteInfo[68][12];
+new TopMenu:hTopMenu;
+void:DisplaySlayTargetMenu(client)
+{
+	new Menu:menu = Menu.Menu(57, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Slay vote", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:DisplayVoteAllTalkMenu(client)
+{
+	if (IsVoteInProgress(0))
+	{
+		ReplyToCommand(client, "[SM] %t", 4520);
+		return 0;
+	}
+	if (TestVoteDelay(client))
+	{
+		LogAction(client, -1, "\"%L\" initiated an alltalk vote.", client);
+		ShowActivity2(client, "[SM] ", "%t", 4584);
+		g_voteType = 3;
+		new var1 = g_voteInfo;
+		var1[0][var1] = '\x00';
+		g_hVoteMenu = Menu.Menu(53, -1);
+		if (ConVar.BoolValue.get(g_Cvar_Alltalk))
+		{
+			Menu.SetTitle(g_hVoteMenu, "Votealltalk Off");
+		}
+		else
+		{
+			Menu.SetTitle(g_hVoteMenu, "Votealltalk On");
+		}
+		Menu.AddItem(g_hVoteMenu, "###yes###", "Yes", 0);
+		Menu.AddItem(g_hVoteMenu, "###no###", "No", 0);
+		Menu.ExitButton.set(g_hVoteMenu, false);
+		Menu.DisplayVoteToAll(g_hVoteMenu, 20, 0);
+		return 0;
+	}
+	return 0;
+}
+
+void:DisplayVoteFFMenu(client)
+{
+	if (IsVoteInProgress(0))
+	{
+		ReplyToCommand(client, "[SM] %t", 4728);
+		return 0;
+	}
+	if (TestVoteDelay(client))
+	{
+		LogAction(client, -1, "\"%L\" initiated a friendly fire vote.", client);
+		ShowActivity2(client, "[SM] ", "%t", 4800);
+		g_voteType = 4;
+		new var1 = g_voteInfo;
+		var1[0][var1] = '\x00';
+		g_hVoteMenu = Menu.Menu(53, -1);
+		if (ConVar.BoolValue.get(g_Cvar_FF))
+		{
+			Menu.SetTitle(g_hVoteMenu, "Voteff Off");
+		}
+		else
+		{
+			Menu.SetTitle(g_hVoteMenu, "Voteff On");
+		}
+		Menu.AddItem(g_hVoteMenu, "###yes###", "Yes", 0);
+		Menu.AddItem(g_hVoteMenu, "###no###", "No", 0);
+		Menu.ExitButton.set(g_hVoteMenu, false);
+		Menu.DisplayVoteToAll(g_hVoteMenu, 20, 0);
+		return 0;
+	}
+	return 0;
+}
+
+void:VoteMenuClose()
+{
+	CloseHandle(g_hVoteMenu);
+	g_hVoteMenu = 0;
+	return 0;
+}
+
+Float:GetVotePercent(votes, totalVotes)
+{
+	return float(votes) / float(totalVotes);
+}
+
+bool:TestVoteDelay(client)
+{
+	new delay = CheckVoteDelay();
+	if (0 < delay)
+	{
+		if (delay > 60)
+		{
+			ReplyToCommand(client, "[SM] %t", "Vote Delay Minutes", delay / 60);
+		}
+		else
+		{
+			ReplyToCommand(client, "[SM] %t", "Vote Delay Seconds", delay);
+		}
+		return 0;
+	}
+	return 1;
+}
+
+bool:Menu.DisplayVoteToAll(Menu:this, time, flags)
+{
+	new total;
+	new players[MaxClients];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (IsClientInGame(i) && IsFakeClient(i))
+		{
+		}
+		else
+		{
+			total++;
+			players[0][total] = i;
+		}
+		i++;
+	}
+	return Menu.DisplayVote(this, players[0], total, time, flags);
+}
+
+void:GetMenuVoteInfo(param2, &winningVotes, &totalVotes)
+{
+	winningVotes = param2 & 65535;
+	totalVotes = param2 >>> 16;
+	return 0;
+}
+
+bool:IsNewVoteAllowed()
+{
+	new var1;
+	if (IsVoteInProgress(0) || CheckVoteDelay())
+	{
+		return 0;
+	}
+	return 1;
+}
+
+void:PrintToChatAll(String:format[], any:_arg1)
+{
+	new String:buffer[1024];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		if (IsClientInGame(i))
+		{
+			SetGlobalTransTarget(i);
+			VFormat(buffer, 254, format[0], 2);
+			PrintToChat(i, "%s", buffer);
+		}
+		i++;
+	}
+	return 0;
+}
+
+void:ReplyToTargetError(client, reason)
+{
+	switch (reason)
+	{
+		case -7:
+		{
+			ReplyToCommand(client, "[SM] %t", 2496);
+		}
+		case -6:
+		{
+			ReplyToCommand(client, "[SM] %t", 2468);
+		}
+		case -5:
+		{
+			ReplyToCommand(client, "[SM] %t", 2440);
+		}
+		case -4:
+		{
+			ReplyToCommand(client, "[SM] %t", 2412);
+		}
+		case -3:
+		{
+			ReplyToCommand(client, "[SM] %t", 2380);
+		}
+		case -2:
+		{
+			ReplyToCommand(client, "[SM] %t", 2352);
+		}
+		case -1:
+		{
+			ReplyToCommand(client, "[SM] %t", 2320);
+		}
+		case 0:
+		{
+			ReplyToCommand(client, "[SM] %t", 2292);
+		}
+		default:
+		{
+		}
+	}
+	return 0;
+}
+
+Handle:FindPluginByFile(String:filename[])
+{
+	new String:buffer[1024];
+	new Handle:iter = GetPluginIterator();
+	new Handle:pl;
+	while (MorePlugins(iter))
+	{
+		pl = ReadPlugin(iter);
+		GetPluginFilename(pl, buffer, 256);
+		if (!(strcmp(buffer, filename[0], false)))
+		{
+			CloseHandle(iter);
+			return pl;
+		}
+	}
+	CloseHandle(iter);
+	return 0;
+}
+
+void:DisplayVoteGravityMenu(client, count, String:items[][])
+{
+	LogAction(client, -1, "\"%L\" initiated a gravity vote.", client);
+	ShowActivity2(client, "[SM] ", "%t", 3528);
+	g_voteType = 0;
+	g_hVoteMenu = Menu.Menu(53, -1);
+	if (count == 1)
+	{
+		new var1 = g_voteInfo;
+		strcopy(var1[0][var1], 65, items[0][0]);
+		Menu.SetTitle(g_hVoteMenu, "Change Gravity To");
+		Menu.AddItem(g_hVoteMenu, items[0][0], "Yes", 0);
+		Menu.AddItem(g_hVoteMenu, "###no###", "No", 0);
+	}
+	else
+	{
+		new var2 = g_voteInfo;
+		var2[0][var2] = '\x00';
+		Menu.SetTitle(g_hVoteMenu, "Gravity Vote");
+		new i;
+		while (i < count)
+		{
+			Menu.AddItem(g_hVoteMenu, items[0][i], items[0][i], 0);
+			i++;
+		}
+	}
+	Menu.ExitButton.set(g_hVoteMenu, false);
+	Menu.DisplayVoteToAll(g_hVoteMenu, 20, 0);
+	return 0;
+}
+
+void:DisplayVoteBurnMenu(client, target, String:name[])
+{
+	if (IsPlayerAlive(target))
+	{
+		g_voteTarget = GetClientUserId(target);
+		new var1 = g_voteInfo;
+		GetClientName(target, var1[0][var1], 65);
+		LogAction(client, target, "\"%L\" initiated a burn vote against \"%L\"", client, target);
+		new var2 = g_voteInfo;
+		ShowActivity2(client, "[SM] ", "%t", "Initiated Vote Burn", var2[0][var2]);
+		g_voteType = 1;
+		g_hVoteMenu = Menu.Menu(53, -1);
+		Menu.SetTitle(g_hVoteMenu, "Voteburn player");
+		Menu.AddItem(g_hVoteMenu, "###yes###", "Yes", 0);
+		Menu.AddItem(g_hVoteMenu, "###no###", "No", 0);
+		Menu.ExitButton.set(g_hVoteMenu, false);
+		Menu.DisplayVoteToAll(g_hVoteMenu, 20, 0);
+		return 0;
+	}
+	ReplyToCommand(client, "[SM] %t", "Cannot be performed on dead", name[0]);
+	return 0;
+}
+
+void:DisplayBurnTargetMenu(client)
+{
+	new Menu:menu = Menu.Menu(55, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Burn vote", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:DisplayVoteSlayMenu(client, target, String:name[])
+{
+	if (IsPlayerAlive(target))
+	{
+		g_voteTarget = GetClientUserId(target);
+		new var1 = g_voteInfo;
+		GetClientName(target, var1[0][var1], 65);
+		LogAction(client, target, "\"%L\" initiated a slay vote against \"%L\"", client, target);
+		new var2 = g_voteInfo;
+		ShowActivity2(client, "[SM] ", "%t", "Initiated Vote Slay", var2[0][var2]);
+		g_voteType = 2;
+		g_hVoteMenu = Menu.Menu(53, -1);
+		Menu.SetTitle(g_hVoteMenu, "Voteslay Player");
+		Menu.AddItem(g_hVoteMenu, "###yes###", "Yes", 0);
+		Menu.AddItem(g_hVoteMenu, "###no###", "No", 0);
+		Menu.ExitButton.set(g_hVoteMenu, false);
+		Menu.DisplayVoteToAll(g_hVoteMenu, 20, 0);
+		return 0;
+	}
+	ReplyToCommand(client, "[SM] %t", "Cannot be performed on dead", name[0]);
+	return 0;
+}
+
+public void:AdminMenu_VoteAllTalk(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayVoteAllTalkMenu(param);
+		}
+		if (action == 3)
+		{
+			new var1;
+			if (IsNewVoteAllowed())
+			{
+				var1 = 0;
+			}
+			else
+			{
+				var1 = 6;
+			}
+			buffer[0] = var1;
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Alltalk vote", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_VoteBurn(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayBurnTargetMenu(param);
+		}
+		if (action == 3)
+		{
+			new var1;
+			if (IsNewVoteAllowed())
+			{
+				var1 = 0;
+			}
+			else
+			{
+				var1 = 6;
+			}
+			buffer[0] = var1;
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Burn vote", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_VoteFF(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayVoteFFMenu(param);
+		}
+		if (action == 3)
+		{
+			new var1;
+			if (IsNewVoteAllowed())
+			{
+				var1 = 0;
+			}
+			else
+			{
+				var1 = 6;
+			}
+			buffer[0] = var1;
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Vote FF", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_VoteGravity(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+
+/* ERROR! null */
+ function "AdminMenu_VoteGravity" (number 19)
+
+public void:AdminMenu_VoteSlay(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplaySlayTargetMenu(param);
+		}
+		if (action == 3)
+		{
+			new var1;
+			if (IsNewVoteAllowed())
+			{
+				var1 = 0;
+			}
+			else
+			{
+				var1 = 6;
+			}
+			buffer[0] = var1;
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Slay vote", param);
+	}
+	return 0;
+}
+
+public Action:Command_VoteAlltalk(client, args)
+{
+	if (0 < args)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_votealltalk");
+		return 3;
+	}
+	DisplayVoteAllTalkMenu(client);
+	return 3;
+}
+
+public Action:Command_VoteBurn(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_voteburn <player>");
+		return 3;
+	}
+	if (IsVoteInProgress(0))
+	{
+		ReplyToCommand(client, "[SM] %t", 4144);
+		return 3;
+	}
+	if (TestVoteDelay(client))
+	{
+		new String:text[1024];
+		new String:arg[256];
+		GetCmdArgString(text, 256);
+		BreakString(text, arg, 64);
+		new String:target_name[256];
+		new target_list[65];
+		new target_count;
+		new bool:tn_is_ml;
+		if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 16, target_name, 64, tn_is_ml)))
+		{
+			ReplyToTargetError(client, target_count);
+			return 3;
+		}
+		DisplayVoteBurnMenu(client, target_list[0], arg);
+		return 3;
+	}
+	return 3;
+}
+
+public Action:Command_VoteFF(client, args)
+{
+	if (0 < args)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_voteff");
+		return 3;
+	}
+	DisplayVoteFFMenu(client);
+	return 3;
+}
+
+public Action:Command_VoteGravity(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_votegravity <amount> [amount2] ... [amount5]");
+		return 3;
+	}
+	if (IsVoteInProgress(0))
+	{
+		ReplyToCommand(client, "[SM] %t", 3752);
+		return 3;
+	}
+	if (TestVoteDelay(client))
+	{
+		new String:text[1024];
+		GetCmdArgString(text, 256);
+
+/* ERROR! null */
+ function "Command_VoteGravity" (number 24)
+
+public Action:Command_VoteSlay(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_voteslay <player>");
+		return 3;
+	}
+	if (IsVoteInProgress(0))
+	{
+		ReplyToCommand(client, "[SM] %t", 4492);
+		return 3;
+	}
+	if (TestVoteDelay(client))
+	{
+		new String:text[1024];
+		new String:arg[256];
+		GetCmdArgString(text, 256);
+		BreakString(text, arg, 64);
+		new String:target_name[256];
+		new target_list[65];
+		new target_count;
+		new bool:tn_is_ml;
+		if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 16, target_name, 64, tn_is_ml)))
+		{
+			ReplyToTargetError(client, target_count);
+			return 3;
+		}
+		DisplayVoteSlayMenu(client, target_list[0], arg);
+		return 3;
+	}
+	return 3;
+}
+
+public Handler_VoteCallback(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		VoteMenuClose();
+	}
+	else
+	{
+		if (action == 2)
+		{
+			new String:title[256];
+			Menu.GetTitle(menu, title, 64);
+			new String:buffer[1024];
+			new var11 = g_voteInfo;
+			Format(buffer, 255, "%T", title, param1, var11[0][var11]);
+			new Panel:panel = param2;
+			Panel.SetTitle(panel, buffer, false);
+		}
+		if (action == 512)
+		{
+			new String:display[256];
+			Menu.GetItem(menu, param2, "", 0, 0, display, 64);
+			new var1;
+			if (strcmp(display, "###no###", true) && strcmp(display, "###yes###", true))
+			{
+				new String:buffer[1024];
+				Format(buffer, 255, "%T", display, param1);
+				return RedrawMenuItem(buffer);
+			}
+		}
+		new var2;
+		if (action == 128 && param1 == -2)
+		{
+			PrintToChatAll("[SM] %t", 5900);
+		}
+		if (action == 32)
+		{
+			new String:item[256];
+			new Float:percent = 0.0;
+			new Float:limit = 0.0;
+			new votes;
+			new totalVotes;
+			GetMenuVoteInfo(param2, votes, totalVotes);
+			Menu.GetItem(menu, param1, item, 64, 0, "", 0);
+			new var3;
+			if (strcmp(item, "###no###", true) && param1 == 1)
+			{
+				votes = totalVotes - votes;
+			}
+			percent = GetVotePercent(votes, totalVotes);
+			limit = ConVar.FloatValue.get(g_Cvar_Limits[g_voteType]);
+			new var4;
+			if ((strcmp(item, "###yes###", true) && FloatCompare(percent, limit) < 0 && param1) || (strcmp(item, "###no###", true) && param1 == 1))
+			{
+				LogAction(-1, -1, "Vote failed.");
+				PrintToChatAll("[SM] %t", "Vote Failed", RoundToNearest(limit * 100.0), RoundToNearest(percent * 100.0), totalVotes);
+			}
+			else
+			{
+				PrintToChatAll("[SM] %t", "Vote Successful", RoundToNearest(percent * 100.0), totalVotes);
+				switch (g_voteType)
+				{
+					case 0:
+					{
+						PrintToChatAll("[SM] %t", "Cvar changed", "sv_gravity", item);
+						LogAction(-1, -1, "Changing gravity to %s due to vote.", item);
+						ConVar.IntValue.set(g_Cvar_Gravity, StringToInt(item, 10));
+					}
+					case 1:
+					{
+						new voteTarget;
+						if ((voteTarget = GetClientOfUserId(g_voteTarget)))
+						{
+							new var15 = g_voteInfo;
+							PrintToChatAll("[SM] %t", "Set target on fire", "_s", var15[0][var15]);
+							LogAction(-1, voteTarget, "Vote burn successful, igniting \"%L\"", voteTarget);
+							IgniteEntity(voteTarget, 19.8, false, 0.0, false);
+						}
+						else
+						{
+							new var14 = g_voteInfo;
+							LogAction(-1, -1, "Vote burn failed, unable to burn \"%s\" (reason \"%s\")", var14[0][var14], "Player no longer available");
+						}
+					}
+					case 2:
+					{
+						new voteTarget;
+						if ((voteTarget = GetClientOfUserId(g_voteTarget)))
+						{
+							new var13 = g_voteInfo;
+							PrintToChatAll("[SM] %t", "Slayed player", var13[0][var13]);
+							LogAction(-1, voteTarget, "Vote slay successful, slaying \"%L\"", voteTarget);
+							ExtinguishEntity(voteTarget);
+							ForcePlayerSuicide(voteTarget);
+						}
+						else
+						{
+							new var12 = g_voteInfo;
+							LogAction(-1, -1, "Vote slay failed, unable to slay \"%s\" (reason \"%s\")", var12[0][var12], "Player no longer available");
+						}
+					}
+					case 3:
+					{
+						new var9;
+						if (ConVar.BoolValue.get(g_Cvar_Alltalk))
+						{
+							var9 = 6412;
+						}
+						else
+						{
+							var9 = 6416;
+						}
+						PrintToChatAll("[SM] %t", "Cvar changed", "sv_alltalk", var9);
+						new var10;
+						if (ConVar.BoolValue.get(g_Cvar_Alltalk))
+						{
+							var10 = 6456;
+						}
+						else
+						{
+							var10 = 6460;
+						}
+						LogAction(-1, -1, "Changing alltalk to %s due to vote.", var10);
+						ConVar.BoolValue.set(g_Cvar_Alltalk, !ConVar.BoolValue.get(g_Cvar_Alltalk));
+					}
+					case 4:
+					{
+						new var7;
+						if (ConVar.BoolValue.get(g_Cvar_FF))
+						{
+							var7 = 6504;
+						}
+						else
+						{
+							var7 = 6508;
+						}
+						PrintToChatAll("[SM] %t", "Cvar changed", "mp_friendlyfire", var7);
+						new var8;
+						if (ConVar.BoolValue.get(g_Cvar_FF))
+						{
+							var8 = 6556;
+						}
+						else
+						{
+							var8 = 6560;
+						}
+						LogAction(-1, -1, "Changing friendly fire to %s due to vote.", var8);
+						ConVar.BoolValue.set(g_Cvar_FF, !ConVar.BoolValue.get(g_Cvar_FF));
+					}
+					default:
+					{
+					}
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Burn(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new String:name[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, name, 32);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					if (IsPlayerAlive(target))
+					{
+						DisplayVoteBurnMenu(param1, target, name);
+					}
+					PrintToChat(param1, "[SM] %t", 4076);
+				}
+				PrintToChat(param1, "[SM] %t", 4048);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 4012);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Slay(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new String:name[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, name, 32);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					if (IsPlayerAlive(target))
+					{
+						DisplayVoteSlayMenu(param1, target, name);
+					}
+					PrintToChat(param1, "[SM] %t", 4424);
+				}
+				PrintToChat(param1, "[SM] %t", 4396);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 4360);
+			}
+		}
+	}
+	return 0;
+}
+
+public void:OnAdminMenuReady(Handle:aTopMenu)
+{
+	new TopMenu:topmenu = TopMenu.FromHandle(aTopMenu);
+	if (hTopMenu == topmenu)
+	{
+		return 0;
+	}
+	hTopMenu = topmenu;
+	new TopMenuObject:voting_commands = TopMenu.FindCategory(hTopMenu, "VotingCommands");
+	if (voting_commands)
+	{
+		TopMenu.AddItem(hTopMenu, "sm_votegravity", 39, voting_commands, "sm_votegravity", 1024, "");
+		TopMenu.AddItem(hTopMenu, "sm_voteburn", 35, voting_commands, "sm_voteburn", 1056, "");
+		TopMenu.AddItem(hTopMenu, "sm_voteslay", 41, voting_commands, "sm_voteslay", 1056, "");
+		TopMenu.AddItem(hTopMenu, "sm_votealltalk", 33, voting_commands, "sm_votealltalk", 1024, "");
+		TopMenu.AddItem(hTopMenu, "sm_voteff", 37, voting_commands, "sm_voteff", 1024, "");
+	}
+	return 0;
+}
+
+public void:OnPluginStart()
+{
+	if (FindPluginByFile("basefunvotes.smx"))
+	{
+		ThrowError("This plugin replaces basefuncommands.  You cannot run both at once.");
+	}
+	LoadTranslations("common.phrases");
+	LoadTranslations("basevotes.phrases");
+	LoadTranslations("funvotes.phrases");
+	LoadTranslations("funcommands.phrases");
+	RegAdminCmd("sm_votegravity", 49, 1024, "sm_votegravity <amount> [amount2] ... [amount5]", "", 0);
+	RegAdminCmd("sm_voteburn", 45, 1056, "sm_voteburn <player>", "", 0);
+	RegAdminCmd("sm_voteslay", 51, 1056, "sm_voteslay <player>", "", 0);
+	RegAdminCmd("sm_votealltalk", 43, 1024, "sm_votealltalk", "", 0);
+	RegAdminCmd("sm_voteff", 47, 1024, "sm_voteff", "", 0);
+	g_Cvar_Limits[0] = CreateConVar("sm_vote_gravity", "0.60", "percent required for successful gravity vote.", 0, true, 0.05, true, 1.0);
+	g_Cvar_Limits[1] = CreateConVar("sm_vote_burn", "0.60", "percent required for successful burn vote.", 0, true, 0.05, true, 1.0);
+	g_Cvar_Limits[2] = CreateConVar("sm_vote_slay", "0.60", "percent required for successful slay vote.", 0, true, 0.05, true, 1.0);
+	g_Cvar_Limits[3] = CreateConVar("sm_vote_alltalk", "0.60", "percent required for successful alltalk vote.", 0, true, 0.05, true, 1.0);
+	g_Cvar_Limits[4] = CreateConVar("sm_vote_ff", "0.60", "percent required for successful friendly fire vote.", 0, true, 0.05, true, 1.0);
+	g_Cvar_Gravity = FindConVar("sv_gravity");
+	g_Cvar_Alltalk = FindConVar("sv_alltalk");
+	g_Cvar_FF = FindConVar("mp_friendlyfire");
+	AutoExecConfig(true, "funvotes", "sourcemod");
+	new TopMenu:topmenu;
+	new var1;
+	if (LibraryExists("adminmenu") && (topmenu = GetAdminTopMenu()))
+	{
+		OnAdminMenuReady(topmenu);
+	}
+	return 0;
+}
+
+public void:__ext_core_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetFeatureStatus");
+	MarkNativeAsOptional("RequireFeature");
+	MarkNativeAsOptional("AddCommandListener");
+	MarkNativeAsOptional("RemoveCommandListener");
+	MarkNativeAsOptional("BfWriteBool");
+	MarkNativeAsOptional("BfWriteByte");
+	MarkNativeAsOptional("BfWriteChar");
+	MarkNativeAsOptional("BfWriteShort");
+	MarkNativeAsOptional("BfWriteWord");
+	MarkNativeAsOptional("BfWriteNum");
+	MarkNativeAsOptional("BfWriteFloat");
+	MarkNativeAsOptional("BfWriteString");
+	MarkNativeAsOptional("BfWriteEntity");
+	MarkNativeAsOptional("BfWriteAngle");
+	MarkNativeAsOptional("BfWriteCoord");
+	MarkNativeAsOptional("BfWriteVecCoord");
+	MarkNativeAsOptional("BfWriteVecNormal");
+	MarkNativeAsOptional("BfWriteAngles");
+	MarkNativeAsOptional("BfReadBool");
+	MarkNativeAsOptional("BfReadByte");
+	MarkNativeAsOptional("BfReadChar");
+	MarkNativeAsOptional("BfReadShort");
+	MarkNativeAsOptional("BfReadWord");
+	MarkNativeAsOptional("BfReadNum");
+	MarkNativeAsOptional("BfReadFloat");
+	MarkNativeAsOptional("BfReadString");
+	MarkNativeAsOptional("BfReadEntity");
+	MarkNativeAsOptional("BfReadAngle");
+	MarkNativeAsOptional("BfReadCoord");
+	MarkNativeAsOptional("BfReadVecCoord");
+	MarkNativeAsOptional("BfReadVecNormal");
+	MarkNativeAsOptional("BfReadAngles");
+	MarkNativeAsOptional("BfGetNumBytesLeft");
+	MarkNativeAsOptional("BfWrite.WriteBool");
+	MarkNativeAsOptional("BfWrite.WriteByte");
+	MarkNativeAsOptional("BfWrite.WriteChar");
+	MarkNativeAsOptional("BfWrite.WriteShort");
+	MarkNativeAsOptional("BfWrite.WriteWord");
+	MarkNativeAsOptional("BfWrite.WriteNum");
+	MarkNativeAsOptional("BfWrite.WriteFloat");
+	MarkNativeAsOptional("BfWrite.WriteString");
+	MarkNativeAsOptional("BfWrite.WriteEntity");
+	MarkNativeAsOptional("BfWrite.WriteAngle");
+	MarkNativeAsOptional("BfWrite.WriteCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecNormal");
+	MarkNativeAsOptional("BfWrite.WriteAngles");
+	MarkNativeAsOptional("BfRead.ReadBool");
+	MarkNativeAsOptional("BfRead.ReadByte");
+	MarkNativeAsOptional("BfRead.ReadChar");
+	MarkNativeAsOptional("BfRead.ReadShort");
+	MarkNativeAsOptional("BfRead.ReadWord");
+	MarkNativeAsOptional("BfRead.ReadNum");
+	MarkNativeAsOptional("BfRead.ReadFloat");
+	MarkNativeAsOptional("BfRead.ReadString");
+	MarkNativeAsOptional("BfRead.ReadEntity");
+	MarkNativeAsOptional("BfRead.ReadAngle");
+	MarkNativeAsOptional("BfRead.ReadCoord");
+	MarkNativeAsOptional("BfRead.ReadVecCoord");
+	MarkNativeAsOptional("BfRead.ReadVecNormal");
+	MarkNativeAsOptional("BfRead.ReadAngles");
+	MarkNativeAsOptional("BfRead.BytesLeft.get");
+	MarkNativeAsOptional("PbReadInt");
+	MarkNativeAsOptional("PbReadFloat");
+	MarkNativeAsOptional("PbReadBool");
+	MarkNativeAsOptional("PbReadString");
+	MarkNativeAsOptional("PbReadColor");
+	MarkNativeAsOptional("PbReadAngle");
+	MarkNativeAsOptional("PbReadVector");
+	MarkNativeAsOptional("PbReadVector2D");
+	MarkNativeAsOptional("PbGetRepeatedFieldCount");
+	MarkNativeAsOptional("PbSetInt");
+	MarkNativeAsOptional("PbSetFloat");
+	MarkNativeAsOptional("PbSetBool");
+	MarkNativeAsOptional("PbSetString");
+	MarkNativeAsOptional("PbSetColor");
+	MarkNativeAsOptional("PbSetAngle");
+	MarkNativeAsOptional("PbSetVector");
+	MarkNativeAsOptional("PbSetVector2D");
+	MarkNativeAsOptional("PbAddInt");
+	MarkNativeAsOptional("PbAddFloat");
+	MarkNativeAsOptional("PbAddBool");
+	MarkNativeAsOptional("PbAddString");
+	MarkNativeAsOptional("PbAddColor");
+	MarkNativeAsOptional("PbAddAngle");
+	MarkNativeAsOptional("PbAddVector");
+	MarkNativeAsOptional("PbAddVector2D");
+	MarkNativeAsOptional("PbRemoveRepeatedFieldValue");
+	MarkNativeAsOptional("PbReadMessage");
+	MarkNativeAsOptional("PbReadRepeatedMessage");
+	MarkNativeAsOptional("PbAddMessage");
+	MarkNativeAsOptional("Protobuf.ReadInt");
+	MarkNativeAsOptional("Protobuf.ReadInt64");
+	MarkNativeAsOptional("Protobuf.ReadFloat");
+	MarkNativeAsOptional("Protobuf.ReadBool");
+	MarkNativeAsOptional("Protobuf.ReadString");
+	MarkNativeAsOptional("Protobuf.ReadColor");
+	MarkNativeAsOptional("Protobuf.ReadAngle");
+	MarkNativeAsOptional("Protobuf.ReadVector");
+	MarkNativeAsOptional("Protobuf.ReadVector2D");
+	MarkNativeAsOptional("Protobuf.GetRepeatedFieldCount");
+	MarkNativeAsOptional("Protobuf.SetInt");
+	MarkNativeAsOptional("Protobuf.SetInt64");
+	MarkNativeAsOptional("Protobuf.SetFloat");
+	MarkNativeAsOptional("Protobuf.SetBool");
+	MarkNativeAsOptional("Protobuf.SetString");
+	MarkNativeAsOptional("Protobuf.SetColor");
+	MarkNativeAsOptional("Protobuf.SetAngle");
+	MarkNativeAsOptional("Protobuf.SetVector");
+	MarkNativeAsOptional("Protobuf.SetVector2D");
+	MarkNativeAsOptional("Protobuf.AddInt");
+	MarkNativeAsOptional("Protobuf.AddInt64");
+	MarkNativeAsOptional("Protobuf.AddFloat");
+	MarkNativeAsOptional("Protobuf.AddBool");
+	MarkNativeAsOptional("Protobuf.AddString");
+	MarkNativeAsOptional("Protobuf.AddColor");
+	MarkNativeAsOptional("Protobuf.AddAngle");
+	MarkNativeAsOptional("Protobuf.AddVector");
+	MarkNativeAsOptional("Protobuf.AddVector2D");
+	MarkNativeAsOptional("Protobuf.RemoveRepeatedFieldValue");
+	MarkNativeAsOptional("Protobuf.ReadMessage");
+	MarkNativeAsOptional("Protobuf.ReadRepeatedMessage");
+	MarkNativeAsOptional("Protobuf.AddMessage");
+	VerifyCoreVersion();
+	return 0;
+}
+
+public void:__ext_topmenus_SetNTVOptional()
+{
+	MarkNativeAsOptional("CreateTopMenu");
+	MarkNativeAsOptional("LoadTopMenuConfig");
+	MarkNativeAsOptional("AddToTopMenu");
+	MarkNativeAsOptional("RemoveFromTopMenu");
+	MarkNativeAsOptional("DisplayTopMenu");
+	MarkNativeAsOptional("DisplayTopMenuCategory");
+	MarkNativeAsOptional("FindTopMenuCategory");
+	MarkNativeAsOptional("SetTopMenuTitleCaching");
+	MarkNativeAsOptional("TopMenu.TopMenu");
+	MarkNativeAsOptional("TopMenu.FromHandle");
+	MarkNativeAsOptional("TopMenu.LoadConfig");
+	MarkNativeAsOptional("TopMenu.AddCategory");
+	MarkNativeAsOptional("TopMenu.AddItem");
+	MarkNativeAsOptional("TopMenu.GetInfoString");
+	MarkNativeAsOptional("TopMenu.GetObjName");
+	MarkNativeAsOptional("TopMenu.Remove");
+	MarkNativeAsOptional("TopMenu.Display");
+	MarkNativeAsOptional("TopMenu.DisplayCategory");
+	MarkNativeAsOptional("TopMenu.FindCategory");
+	MarkNativeAsOptional("TopMenu.CacheTitles.set");
+	return 0;
+}
+
+public void:__pl_adminmenu_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetAdminTopMenu");
+	MarkNativeAsOptional("AddTargetsToMenu");
+	MarkNativeAsOptional("AddTargetsToMenu2");
+	return 0;
+}
+

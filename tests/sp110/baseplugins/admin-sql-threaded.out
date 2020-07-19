@@ -1,0 +1,757 @@
+public PlVers:__version =
+{
+	version = 5,
+	filevers = "1.10.0.6484",
+	date = "04/21/2020",
+	time = "18:15:15"
+};
+new Float:NULL_VECTOR[3];
+new String:NULL_STRING[16];
+public Extension:__ext_core =
+{
+	name = "Core",
+	file = "core",
+	autoload = 0,
+	required = 0,
+};
+new MaxClients;
+public Plugin:myinfo =
+{
+	name = "SQL Admins (Threaded)",
+	description = "Reads admins from SQL dynamically",
+	author = "AlliedModders LLC",
+	version = "1.10.0.6484",
+	url = "http://www.sourcemod.net/"
+};
+new Database:hDatabase;
+new g_sequence;
+new ConnectLock;
+new RebuildCachePart[3];
+new <enumstruct0>:playerinfo[66] =
+{
+	264, 268, 272, 276, 280, 284, 288, 292, 296, 300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 388, 392, 396, 400, 404, 408, 412, 416, 420, 424, 428, 432, 436, 440, 444, 448, 452, 456, 460, 464, 468, 472, 476, 480, 484, 488, 492, 496, 500, 504, 508, 512, 516, 520, 524
+};
+void:FetchUsersWeCan(Database:db)
+{
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		new var1;
+		if (playerinfo[i][1] && GetUserAdmin(i) == -1)
+		{
+			FetchUser(db, i);
+		}
+		i++;
+	}
+	RebuildCachePart[2] = 0;
+	return 0;
+}
+
+void:FetchGroups(Database:db, sequence)
+{
+	new String:query[1024];
+	Format(query, 255, "SELECT flags, name, immunity_level FROM sm_groups");
+	new DataPack:pk = DataPack.DataPack();
+	DataPack.WriteCell(pk, sequence, false);
+	DataPack.WriteString(pk, query, false);
+	Database.Query(db, 29, query, pk, 0);
+	return 0;
+}
+
+void:FetchOverrides(Database:db, sequence)
+{
+	new String:query[1024];
+	Format(query, 255, "SELECT type, name, flags FROM sm_overrides");
+	new DataPack:pk = DataPack.DataPack();
+	DataPack.WriteCell(pk, sequence, false);
+	DataPack.WriteString(pk, query, false);
+	Database.Query(db, 31, query, pk, 0);
+	return 0;
+}
+
+bool:StrEqual(String:str1[], String:str2[], bool:caseSensitive)
+{
+	return strcmp(str1[0], str2[0], caseSensitive) == 0;
+}
+
+void:RequestDatabaseConnection()
+{
+	g_sequence += 1;
+	ConnectLock = g_sequence;
+	if (SQL_CheckConfig("admins"))
+	{
+		Database.Connect(19, "admins", ConnectLock);
+	}
+	else
+	{
+		Database.Connect(19, "default", ConnectLock);
+	}
+	return 0;
+}
+
+void:FetchUser(Database:db, client)
+{
+	new String:name[512];
+	new String:safe_name[1024];
+	new String:steamid[128];
+	new String:steamidalt[128];
+	new String:ipaddr[96];
+	GetClientName(client, name, 128);
+	GetClientIP(client, ipaddr, 24, true);
+	steamid[0] = '\x00';
+	if (GetClientAuthId(client, 1, steamid, 32, true))
+	{
+		if (StrEqual(steamid, "STEAM_ID_LAN", true))
+		{
+			steamid[0] = '\x00';
+		}
+	}
+	Database.Escape(db, name, safe_name, 255, 0);
+	new String:query[2048];
+	new len = Format(query[len], 512 - len, "SELECT a.id, a.authtype, a.identity, a.password, a.flags, a.name, COUNT(ag.group_id), immunity") + len;
+	len = Format(query[len], 512 - len, " FROM sm_admins a LEFT JOIN sm_admins_groups ag ON a.id = ag.admin_id WHERE ") + len;
+	len = Format(query[len], 512 - len, " (a.authtype = 'ip' AND a.identity = '%s')", ipaddr) + len;
+	len = Format(query[len], 512 - len, " OR (a.authtype = 'name' AND a.identity = '%s')", safe_name) + len;
+	if (steamid[0])
+	{
+		strcopy(steamidalt, 32, steamid);
+		new var1;
+		if (steamid[1] == '0')
+		{
+			var1 = 49;
+		}
+		else
+		{
+			var1 = 48;
+		}
+		steamidalt[1] = var1;
+		len = Format(query[len], 512 - len, " OR (a.authtype = 'steam' AND (a.identity = '%s' OR a.identity = '%s'))", steamid, steamidalt) + len;
+	}
+	len = Format(query[len], 512 - len, " GROUP BY a.id") + len;
+	g_sequence += 1;
+	playerinfo[client] = g_sequence;
+	new DataPack:pk = DataPack.DataPack();
+	DataPack.WriteCell(pk, client, false);
+	DataPack.WriteCell(pk, playerinfo[client], false);
+	DataPack.WriteString(pk, query, false);
+	Database.Query(db, 33, query, pk, 0);
+	return 0;
+}
+
+public bool:OnClientConnect(client, String:rejectmsg[], maxlen)
+{
+	playerinfo[client] = 0;
+	playerinfo[client][1] = 0;
+	return 1;
+}
+
+public void:OnClientDisconnect(client)
+{
+	playerinfo[client] = 0;
+	playerinfo[client][1] = 0;
+	return 0;
+}
+
+public Action:OnClientPreAdminCheck(client)
+{
+	playerinfo[client][1] = 1;
+	if (hDatabase)
+	{
+		if (RebuildCachePart[2])
+		{
+			return 0;
+		}
+		if (GetUserAdmin(client) != -1)
+		{
+			return 0;
+		}
+		FetchUser(hDatabase, client);
+		return 3;
+	}
+	return 0;
+}
+
+public void:OnDatabaseConnect(Database:db, String:error[], any:data)
+{
+	new var1;
+	if (ConnectLock == data && hDatabase)
+	{
+		CloseHandle(db);
+		db = 0;
+		return 0;
+	}
+	ConnectLock = 0;
+	hDatabase = db;
+	if (hDatabase)
+	{
+		new sequence;
+		if ((sequence = RebuildCachePart[0]))
+		{
+			FetchOverrides(hDatabase, sequence);
+		}
+		if ((sequence = RebuildCachePart[1]))
+		{
+			FetchGroups(hDatabase, sequence);
+		}
+		if ((sequence = RebuildCachePart[2]))
+		{
+			FetchUsersWeCan(hDatabase);
+		}
+		return 0;
+	}
+	LogError("Failed to connect to database: %s", error[0]);
+	return 0;
+}
+
+public void:OnMapEnd()
+{
+	CloseHandle(hDatabase);
+	hDatabase = 0;
+	return 0;
+}
+
+public void:OnRebuildAdminCache(AdminCachePart:part)
+{
+	decl sequence;
+	g_sequence += 1;
+	sequence = g_sequence;
+	RebuildCachePart[part] = sequence;
+	if (hDatabase)
+	{
+		if (part)
+		{
+			if (part == 1)
+			{
+				FetchGroups(hDatabase, sequence);
+			}
+			if (part == 2)
+			{
+				FetchUsersWeCan(hDatabase);
+			}
+		}
+		else
+		{
+			FetchOverrides(hDatabase, sequence);
+		}
+		return 0;
+	}
+	if (!ConnectLock)
+	{
+		RequestDatabaseConnection();
+	}
+	return 0;
+}
+
+public void:OnReceiveGroupImmunity(Database:db, DBResultSet:rs, String:error[], any:data)
+{
+	new DataPack:pk = data;
+	DataPack.Reset(pk, false);
+	new sequence = DataPack.ReadCell(pk);
+	if (sequence != RebuildCachePart[1])
+	{
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	if (rs)
+	{
+		CloseHandle(pk);
+		pk = 0;
+		while (DBResultSet.FetchRow(rs))
+		{
+			new String:group1[320];
+			new String:group2[320];
+			new GroupId:grp;
+			new GroupId:other;
+			DBResultSet.FetchString(rs, 0, group1, 80, 0);
+			DBResultSet.FetchString(rs, 1, group2, 80, 0);
+			new var1;
+			if (!((grp = FindAdmGroup(group1)) == -1 || (other = FindAdmGroup(group2)) == -1))
+			{
+				GroupId.AddGroupImmunity(grp, other);
+			}
+		}
+		RebuildCachePart[1] = 0;
+		return 0;
+	}
+	new String:query[1024];
+	DataPack.ReadString(pk, query, 255);
+	LogError("SQL error receiving group immunity: %s", error[0]);
+	LogError("Query dump: %s", query);
+	CloseHandle(pk);
+	pk = 0;
+	return 0;
+}
+
+public void:OnReceiveGroupOverrides(Database:db, DBResultSet:rs, String:error[], any:data)
+{
+	new DataPack:pk = data;
+	DataPack.Reset(pk, false);
+	new sequence = DataPack.ReadCell(pk);
+	if (sequence != RebuildCachePart[1])
+	{
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	if (rs)
+	{
+		new String:name[320];
+		new String:type[64];
+		new String:command[256];
+		new String:access[64];
+		new GroupId:grp;
+		while (DBResultSet.FetchRow(rs))
+		{
+			DBResultSet.FetchString(rs, 0, name, 80, 0);
+			DBResultSet.FetchString(rs, 1, type, 16, 0);
+			DBResultSet.FetchString(rs, 2, command, 64, 0);
+			DBResultSet.FetchString(rs, 3, access, 16, 0);
+			if (!((grp = FindAdmGroup(name)) == -1))
+			{
+				new OverrideType:o_type = 1;
+				if (StrEqual(type, "group", true))
+				{
+					o_type = 2;
+				}
+				new OverrideRule:o_rule;
+				if (StrEqual(access, "allow", true))
+				{
+					o_rule = 1;
+				}
+				GroupId.AddCommandOverride(grp, command, o_type, o_rule);
+			}
+		}
+		new len;
+		new String:query[1024];
+		len = Format(query[len], 256 - len, "SELECT g1.name, g2.name FROM sm_group_immunity gi") + len;
+		len = Format(query[len], 256 - len, " LEFT JOIN sm_groups g1 ON g1.id = gi.group_id ") + len;
+		len = Format(query[len], 256 - len, " LEFT JOIN sm_groups g2 ON g2.id = gi.other_id") + len;
+		DataPack.Reset(pk, false);
+		DataPack.WriteCell(pk, sequence, false);
+		DataPack.WriteString(pk, query, false);
+		Database.Query(db, 25, query, pk, 0);
+		return 0;
+	}
+	new String:query[1024];
+	DataPack.ReadString(pk, query, 255);
+	LogError("SQL error receiving group overrides: %s", error[0]);
+	LogError("Query dump: %s", query);
+	CloseHandle(pk);
+	pk = 0;
+	return 0;
+}
+
+public void:OnReceiveGroups(Database:db, DBResultSet:rs, String:error[], any:data)
+{
+	new DataPack:pk = data;
+	DataPack.Reset(pk, false);
+	new sequence = DataPack.ReadCell(pk);
+	if (sequence != RebuildCachePart[1])
+	{
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	if (rs)
+	{
+		new String:flags[128];
+		new String:name[512];
+		new immunity;
+		while (DBResultSet.FetchRow(rs))
+		{
+			DBResultSet.FetchString(rs, 0, flags, 32, 0);
+			DBResultSet.FetchString(rs, 1, name, 128, 0);
+			immunity = DBResultSet.FetchInt(rs, 2, 0);
+			new GroupId:grp;
+			if ((grp = FindAdmGroup(name)) == -1)
+			{
+				grp = CreateAdmGroup(name);
+			}
+			new num_flag_chars = strlen(flags);
+			new i;
+			while (i < num_flag_chars)
+			{
+				new AdminFlag:flag;
+				if (FindFlagByChar(flags[i], flag))
+				{
+					GroupId.SetFlag(grp, flag, true);
+				}
+				i++;
+			}
+			GroupId.ImmunityLevel.set(grp, immunity);
+		}
+		new String:query[1024];
+		Format(query, 255, "SELECT g.name, og.type, og.name, og.access FROM sm_group_overrides og JOIN sm_groups g ON og.group_id = g.id ORDER BY g.id DESC");
+		DataPack.Reset(pk, false);
+		DataPack.WriteCell(pk, sequence, false);
+		DataPack.WriteString(pk, query, false);
+		Database.Query(db, 27, query, pk, 0);
+		return 0;
+	}
+	new String:query[1024];
+	DataPack.ReadString(pk, query, 255);
+	LogError("SQL error receiving groups: %s", error[0]);
+	LogError("Query dump: %s", query);
+	CloseHandle(pk);
+	pk = 0;
+	return 0;
+}
+
+public void:OnReceiveOverrides(Database:db, DBResultSet:rs, String:error[], any:data)
+{
+	new DataPack:pk = data;
+	DataPack.Reset(pk, false);
+	new sequence = DataPack.ReadCell(pk);
+	if (sequence != RebuildCachePart[0])
+	{
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	if (rs)
+	{
+		CloseHandle(pk);
+		pk = 0;
+		new String:type[256];
+		new String:name[256];
+		new String:flags[128];
+		new flag_bits;
+		while (DBResultSet.FetchRow(rs))
+		{
+			DBResultSet.FetchString(rs, 0, type, 64, 0);
+			DBResultSet.FetchString(rs, 1, name, 64, 0);
+			DBResultSet.FetchString(rs, 2, flags, 32, 0);
+			flag_bits = ReadFlagString(flags, 0);
+			if (StrEqual(type, "command", true))
+			{
+				AddCommandOverride(name, 1, flag_bits);
+			}
+			else
+			{
+				if (StrEqual(type, "group", true))
+				{
+					AddCommandOverride(name, 2, flag_bits);
+				}
+			}
+		}
+		RebuildCachePart[0] = 0;
+		return 0;
+	}
+	new String:query[1024];
+	DataPack.ReadString(pk, query, 255);
+	LogError("SQL error receiving overrides: %s", error[0]);
+	LogError("Query dump: %s", query);
+	CloseHandle(pk);
+	pk = 0;
+	return 0;
+}
+
+public void:OnReceiveUser(Database:db, DBResultSet:rs, String:error[], any:data)
+{
+	new DataPack:pk = data;
+	DataPack.Reset(pk, false);
+	new client = DataPack.ReadCell(pk);
+	new sequence = DataPack.ReadCell(pk);
+	if (sequence != playerinfo[client])
+	{
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	if (rs)
+	{
+		new num_accounts = DBResultSet.RowCount.get(rs);
+		if (num_accounts)
+		{
+			new String:authtype[64];
+			new String:identity[320];
+			new String:password[320];
+			new String:flags[128];
+			new String:name[320];
+			new immunity;
+			new id;
+			new AdminId:adm;
+			new user_lookup[num_accounts][3];
+			new total_users;
+			while (DBResultSet.FetchRow(rs))
+			{
+				id = DBResultSet.FetchInt(rs, 0, 0);
+				DBResultSet.FetchString(rs, 1, authtype, 16, 0);
+				DBResultSet.FetchString(rs, 2, identity, 80, 0);
+				DBResultSet.FetchString(rs, 3, password, 80, 0);
+				DBResultSet.FetchString(rs, 4, flags, 32, 0);
+				DBResultSet.FetchString(rs, 5, name, 80, 0);
+				immunity = DBResultSet.FetchInt(rs, 7, 0);
+				if ((adm = FindAdminByIdentity(authtype, identity)) != -1)
+				{
+					RemoveAdmin(adm);
+				}
+				adm = CreateAdmin(name);
+				if (AdminId.BindIdentity(adm, authtype, identity))
+				{
+					user_lookup[0][total_users] = id;
+					user_lookup[0][total_users][1] = adm;
+					user_lookup[0][total_users][2] = DBResultSet.FetchInt(rs, 6, 0);
+					total_users++;
+					if (password[0])
+					{
+						AdminId.SetPassword(adm, password);
+					}
+					AdminId.ImmunityLevel.set(adm, immunity);
+					new len = strlen(flags);
+					new AdminFlag:flag;
+					new i;
+					while (i < len)
+					{
+						if (FindFlagByChar(flags[i], flag))
+						{
+							AdminId.SetFlag(adm, flag, true);
+						}
+						i++;
+					}
+				}
+				LogError("Could not bind prefetched SQL admin (authtype \"%s\") (identity \"%s\")", authtype, identity);
+			}
+			new group_count;
+			RunAdminCacheChecks(client);
+			adm = GetUserAdmin(client);
+			id = 0;
+			new i;
+			while (i < total_users)
+			{
+				if (adm == user_lookup[0][i][1])
+				{
+					id = user_lookup[0][i];
+					group_count = user_lookup[0][i][2];
+					new var1;
+					if (id && group_count)
+					{
+						NotifyPostAdminCheck(client);
+						CloseHandle(pk);
+						pk = 0;
+						return 0;
+					}
+					new String:query[1024];
+					Format(query, 255, "SELECT g.name FROM sm_admins_groups ag JOIN sm_groups g ON ag.group_id = g.id WHERE ag.admin_id = %d", id);
+					DataPack.Reset(pk, false);
+					DataPack.WriteCell(pk, client, false);
+					DataPack.WriteCell(pk, sequence, false);
+					DataPack.WriteCell(pk, adm, false);
+					DataPack.WriteString(pk, query, false);
+					Database.Query(db, 35, query, pk, 0);
+					return 0;
+				}
+				i++;
+			}
+			new var1;
+			if (id && group_count)
+			{
+				NotifyPostAdminCheck(client);
+				CloseHandle(pk);
+				pk = 0;
+				return 0;
+			}
+			new String:query[1024];
+			Format(query, 255, "SELECT g.name FROM sm_admins_groups ag JOIN sm_groups g ON ag.group_id = g.id WHERE ag.admin_id = %d", id);
+			DataPack.Reset(pk, false);
+			DataPack.WriteCell(pk, client, false);
+			DataPack.WriteCell(pk, sequence, false);
+			DataPack.WriteCell(pk, adm, false);
+			DataPack.WriteString(pk, query, false);
+			Database.Query(db, 35, query, pk, 0);
+			return 0;
+		}
+		RunAdminCacheChecks(client);
+		NotifyPostAdminCheck(client);
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	new String:query[1024];
+	DataPack.ReadString(pk, query, 255);
+	LogError("SQL error receiving user: %s", error[0]);
+	LogError("Query dump: %s", query);
+	RunAdminCacheChecks(client);
+	NotifyPostAdminCheck(client);
+	CloseHandle(pk);
+	pk = 0;
+	return 0;
+}
+
+public void:OnReceiveUserGroups(Database:db, DBResultSet:rs, String:error[], any:data)
+{
+	new DataPack:pk = data;
+	DataPack.Reset(pk, false);
+	new client = DataPack.ReadCell(pk);
+	new sequence = DataPack.ReadCell(pk);
+	if (sequence != playerinfo[client])
+	{
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	new AdminId:adm = DataPack.ReadCell(pk);
+	if (adm != GetUserAdmin(client))
+	{
+		NotifyPostAdminCheck(client);
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	if (rs)
+	{
+		new String:name[320];
+		new GroupId:grp;
+		while (DBResultSet.FetchRow(rs))
+		{
+			DBResultSet.FetchString(rs, 0, name, 80, 0);
+			if (!((grp = FindAdmGroup(name)) == -1))
+			{
+				AdminId.InheritGroup(adm, grp);
+			}
+		}
+		NotifyPostAdminCheck(client);
+		CloseHandle(pk);
+		pk = 0;
+		return 0;
+	}
+	new String:query[1024];
+	DataPack.ReadString(pk, query, 255);
+	LogError("SQL error receiving user: %s", error[0]);
+	LogError("Query dump: %s", query);
+	NotifyPostAdminCheck(client);
+	CloseHandle(pk);
+	pk = 0;
+	return 0;
+}
+
+public void:__ext_core_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetFeatureStatus");
+	MarkNativeAsOptional("RequireFeature");
+	MarkNativeAsOptional("AddCommandListener");
+	MarkNativeAsOptional("RemoveCommandListener");
+	MarkNativeAsOptional("BfWriteBool");
+	MarkNativeAsOptional("BfWriteByte");
+	MarkNativeAsOptional("BfWriteChar");
+	MarkNativeAsOptional("BfWriteShort");
+	MarkNativeAsOptional("BfWriteWord");
+	MarkNativeAsOptional("BfWriteNum");
+	MarkNativeAsOptional("BfWriteFloat");
+	MarkNativeAsOptional("BfWriteString");
+	MarkNativeAsOptional("BfWriteEntity");
+	MarkNativeAsOptional("BfWriteAngle");
+	MarkNativeAsOptional("BfWriteCoord");
+	MarkNativeAsOptional("BfWriteVecCoord");
+	MarkNativeAsOptional("BfWriteVecNormal");
+	MarkNativeAsOptional("BfWriteAngles");
+	MarkNativeAsOptional("BfReadBool");
+	MarkNativeAsOptional("BfReadByte");
+	MarkNativeAsOptional("BfReadChar");
+	MarkNativeAsOptional("BfReadShort");
+	MarkNativeAsOptional("BfReadWord");
+	MarkNativeAsOptional("BfReadNum");
+	MarkNativeAsOptional("BfReadFloat");
+	MarkNativeAsOptional("BfReadString");
+	MarkNativeAsOptional("BfReadEntity");
+	MarkNativeAsOptional("BfReadAngle");
+	MarkNativeAsOptional("BfReadCoord");
+	MarkNativeAsOptional("BfReadVecCoord");
+	MarkNativeAsOptional("BfReadVecNormal");
+	MarkNativeAsOptional("BfReadAngles");
+	MarkNativeAsOptional("BfGetNumBytesLeft");
+	MarkNativeAsOptional("BfWrite.WriteBool");
+	MarkNativeAsOptional("BfWrite.WriteByte");
+	MarkNativeAsOptional("BfWrite.WriteChar");
+	MarkNativeAsOptional("BfWrite.WriteShort");
+	MarkNativeAsOptional("BfWrite.WriteWord");
+	MarkNativeAsOptional("BfWrite.WriteNum");
+	MarkNativeAsOptional("BfWrite.WriteFloat");
+	MarkNativeAsOptional("BfWrite.WriteString");
+	MarkNativeAsOptional("BfWrite.WriteEntity");
+	MarkNativeAsOptional("BfWrite.WriteAngle");
+	MarkNativeAsOptional("BfWrite.WriteCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecNormal");
+	MarkNativeAsOptional("BfWrite.WriteAngles");
+	MarkNativeAsOptional("BfRead.ReadBool");
+	MarkNativeAsOptional("BfRead.ReadByte");
+	MarkNativeAsOptional("BfRead.ReadChar");
+	MarkNativeAsOptional("BfRead.ReadShort");
+	MarkNativeAsOptional("BfRead.ReadWord");
+	MarkNativeAsOptional("BfRead.ReadNum");
+	MarkNativeAsOptional("BfRead.ReadFloat");
+	MarkNativeAsOptional("BfRead.ReadString");
+	MarkNativeAsOptional("BfRead.ReadEntity");
+	MarkNativeAsOptional("BfRead.ReadAngle");
+	MarkNativeAsOptional("BfRead.ReadCoord");
+	MarkNativeAsOptional("BfRead.ReadVecCoord");
+	MarkNativeAsOptional("BfRead.ReadVecNormal");
+	MarkNativeAsOptional("BfRead.ReadAngles");
+	MarkNativeAsOptional("BfRead.BytesLeft.get");
+	MarkNativeAsOptional("PbReadInt");
+	MarkNativeAsOptional("PbReadFloat");
+	MarkNativeAsOptional("PbReadBool");
+	MarkNativeAsOptional("PbReadString");
+	MarkNativeAsOptional("PbReadColor");
+	MarkNativeAsOptional("PbReadAngle");
+	MarkNativeAsOptional("PbReadVector");
+	MarkNativeAsOptional("PbReadVector2D");
+	MarkNativeAsOptional("PbGetRepeatedFieldCount");
+	MarkNativeAsOptional("PbSetInt");
+	MarkNativeAsOptional("PbSetFloat");
+	MarkNativeAsOptional("PbSetBool");
+	MarkNativeAsOptional("PbSetString");
+	MarkNativeAsOptional("PbSetColor");
+	MarkNativeAsOptional("PbSetAngle");
+	MarkNativeAsOptional("PbSetVector");
+	MarkNativeAsOptional("PbSetVector2D");
+	MarkNativeAsOptional("PbAddInt");
+	MarkNativeAsOptional("PbAddFloat");
+	MarkNativeAsOptional("PbAddBool");
+	MarkNativeAsOptional("PbAddString");
+	MarkNativeAsOptional("PbAddColor");
+	MarkNativeAsOptional("PbAddAngle");
+	MarkNativeAsOptional("PbAddVector");
+	MarkNativeAsOptional("PbAddVector2D");
+	MarkNativeAsOptional("PbRemoveRepeatedFieldValue");
+	MarkNativeAsOptional("PbReadMessage");
+	MarkNativeAsOptional("PbReadRepeatedMessage");
+	MarkNativeAsOptional("PbAddMessage");
+	MarkNativeAsOptional("Protobuf.ReadInt");
+	MarkNativeAsOptional("Protobuf.ReadInt64");
+	MarkNativeAsOptional("Protobuf.ReadFloat");
+	MarkNativeAsOptional("Protobuf.ReadBool");
+	MarkNativeAsOptional("Protobuf.ReadString");
+	MarkNativeAsOptional("Protobuf.ReadColor");
+	MarkNativeAsOptional("Protobuf.ReadAngle");
+	MarkNativeAsOptional("Protobuf.ReadVector");
+	MarkNativeAsOptional("Protobuf.ReadVector2D");
+	MarkNativeAsOptional("Protobuf.GetRepeatedFieldCount");
+	MarkNativeAsOptional("Protobuf.SetInt");
+	MarkNativeAsOptional("Protobuf.SetInt64");
+	MarkNativeAsOptional("Protobuf.SetFloat");
+	MarkNativeAsOptional("Protobuf.SetBool");
+	MarkNativeAsOptional("Protobuf.SetString");
+	MarkNativeAsOptional("Protobuf.SetColor");
+	MarkNativeAsOptional("Protobuf.SetAngle");
+	MarkNativeAsOptional("Protobuf.SetVector");
+	MarkNativeAsOptional("Protobuf.SetVector2D");
+	MarkNativeAsOptional("Protobuf.AddInt");
+	MarkNativeAsOptional("Protobuf.AddInt64");
+	MarkNativeAsOptional("Protobuf.AddFloat");
+	MarkNativeAsOptional("Protobuf.AddBool");
+	MarkNativeAsOptional("Protobuf.AddString");
+	MarkNativeAsOptional("Protobuf.AddColor");
+	MarkNativeAsOptional("Protobuf.AddAngle");
+	MarkNativeAsOptional("Protobuf.AddVector");
+	MarkNativeAsOptional("Protobuf.AddVector2D");
+	MarkNativeAsOptional("Protobuf.RemoveRepeatedFieldValue");
+	MarkNativeAsOptional("Protobuf.ReadMessage");
+	MarkNativeAsOptional("Protobuf.ReadRepeatedMessage");
+	MarkNativeAsOptional("Protobuf.AddMessage");
+	VerifyCoreVersion();
+	return 0;
+}
+

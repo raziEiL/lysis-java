@@ -1,5 +1,7 @@
 package lysis.lstructure;
 
+import lysis.types.rtti.RttiType;
+
 public class Variable {
 	long addr_;
 	long tag_id_;
@@ -11,6 +13,7 @@ public class Variable {
 	String name_;
 	Dimension[] dims_;
 	boolean statevar_;
+	RttiType rtti_type_;
 
 	public Variable(long addr, int tag_id, Tag tag, long codeStart, long codeEnd, VariableType type, Scope scope,
 			String name, Dimension[] dims) {
@@ -24,11 +27,18 @@ public class Variable {
 		name_ = name;
 		dims_ = dims;
 		statevar_ = false;
+		rtti_type_ = null;
 	}
-
+	
 	public Variable(long addr, int tag_id, Tag tag, long codeStart, long codeEnd, VariableType type, Scope scope,
 			String name) {
 		this(addr, tag_id, tag, codeStart, codeEnd, type, scope, name, null);
+	}
+
+	public Variable(long addr, long codeStart, long codeEnd, VariableType type, Scope scope,
+			String name, Dimension[] dims, RttiType rttiType) {
+		this(addr, -1, null, codeStart, codeEnd, type, scope, name, dims);
+		rtti_type_ = rttiType;
 	}
 
 	public long address() {
@@ -86,5 +96,30 @@ public class Variable {
 
 	public void markAsStateVariable() {
 		statevar_ = true;
+	}
+	
+	public RttiType rttiType() {
+		return rtti_type_;
+	}
+	
+	public void updateByRef() {
+		rtti_type_.setByRef();
+		type_ = rtti_type_.toVariableType();
+	}
+	
+	public boolean isString() {
+		if (tag_ != null && tag_.isString())
+			return true;
+		if (rtti_type_ != null && rtti_type_.isString())
+			return true;
+		return false;
+	}
+	
+	public boolean isFloat() {
+		if (tag_ != null && tag_.isFloat())
+			return true;
+		if (rtti_type_ != null && rtti_type_.isFloat())
+			return true;
+		return false;
 	}
 }

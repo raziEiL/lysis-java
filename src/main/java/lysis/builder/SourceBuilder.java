@@ -54,9 +54,12 @@ import lysis.nodes.types.DSysReq;
 import lysis.nodes.types.DTempName;
 import lysis.nodes.types.DUnary;
 import lysis.sourcepawn.SPOpcode;
+import lysis.sourcepawn.SourcePawnFile;
 import lysis.types.CellType;
 import lysis.types.PawnType;
 import lysis.types.TypeUnit;
+import lysis.types.rtti.RttiType;
+import lysis.types.rtti.TypeFlag;
 
 public class SourceBuilder {
 	private PawnFile file_;
@@ -127,6 +130,7 @@ public class SourceBuilder {
 			return "!";
 		case or:
 			return "|";
+		case sdiv:
 		case sdiv_alt:
 			return "/";
 		case sdiv_alt_mod:
@@ -155,15 +159,84 @@ public class SourceBuilder {
 		if (type.type() == CellType.Float)
 			return "Float:";
 		if (type.type() == CellType.Tag)
-			return buildTag(type.tag());
+			return buildType(type.tag());
 		return "";
 	}
+	
+	private String buildType(Variable var) {
+		if (var.tag() == null && var.rttiType() == null)
+			return "";
+		
+		String prefix = var.type() == VariableType.Reference ? "&" : "";
+		if (var.tag() != null) {
+			return prefix + buildType(var.tag());
+		}
+		
+		return prefix + buildType(var.rttiType());
+	}
 
-	private String buildTag(Tag tag) {
+	private String buildType(Argument arg) {
+		if (arg.tag() == null && arg.rttiType() == null)
+			return "";
+		
+		String prefix = arg.type() == VariableType.Reference ? "&" : "";
+		if (arg.tag() != null) {
+			return prefix + buildType(arg.tag());
+		}
+		
+		return prefix + buildType(arg.rttiType());
+	}
+	
+	private String buildType(Tag tag) {
 		// TODO: why wouldn't one print "any"?
 		if (tag == null || tag.name().equals("_")/* || tag.name().equals("any") */)
 			return "";
 		return tag.name() + ":";
+	}
+	
+	private String buildType(RttiType type) {
+		switch (type.getTypeFlag()) {
+		case TypeFlag.Bool:
+			return "bool:";
+		case TypeFlag.Int32:
+			return "";
+		case TypeFlag.Float32:
+			return "Float:";
+		case TypeFlag.Char8:
+			return "String:";
+		case TypeFlag.Any:
+			return "any:";
+		case TypeFlag.TopFunction:
+			return "Function:";
+		case TypeFlag.Void:
+			return "void:";
+		case TypeFlag.FixedArray:
+		case TypeFlag.Array:
+			return buildType(type.getArrayBaseType());
+		case TypeFlag.Enum:
+			// FIXME: Hack to access rtti info
+			SourcePawnFile spf = (SourcePawnFile)file_;
+			return spf.getEnumName((int) type.getData()) + ":";
+		case TypeFlag.Typedef:
+			return "<typedef " + type.getData() + ">:";
+		case TypeFlag.Typeset:
+			return "<typeset " + type.getData() + ">:";
+		case TypeFlag.Classdef:
+			return "<classdef " + type.getData() + ">:";
+		case TypeFlag.EnumStruct:
+			return "<enumstruct" + type.getData() + ">:";
+		case TypeFlag.Function:
+			// Only print the return type.
+			return buildType(type.getInnerType());
+		}
+		return "";
+	}
+	
+	// Build return type string
+	private String buildType(Function func) {
+		if (func.returnType() != null)
+			return buildType(func.returnType());
+		return buildType(func.returnTag());
 	}
 
 	private void writeSignature(NodeBlock entry) throws IOException {
@@ -179,7 +252,7 @@ public class SourceBuilder {
 		if (pub != null && !pub.name().matches("\\.\\d+\\..+"))
 			out_.print("public ");
 
-		out_.print(buildTag(f.returnType()) + f.name());
+		out_.print(buildType(f) + f.name());
 
 		out_.print("(");
 		if (f.args() != null) {
@@ -322,6 +395,14 @@ public class SourceBuilder {
 		case GenArray: {
 			return ((DGenArray) node).var().name();
 		}
+		
+		case Call: {
+			return buildCall((DCall) node) + "/* ERROR unknown load Call */";
+		}
+		
+		case Unary: {
+			return buildUnary((DUnary) node) + "/* ERROR unknown load Unary */";
+		}
 
 		default:
 			throw new Exception("unknown load " + node.type());
@@ -419,7 +500,7 @@ public class SourceBuilder {
 
 		String text = "{" + System.lineSeparator();
 		increaseIndent();
-		if (tu.type().isString())
+		if (tu.isString())
 			text += dumpStringArray(var, ia.address(), 0);
 		else
 			text += dumpArray(var, ia.address(), 0);
@@ -453,7 +534,7 @@ public class SourceBuilder {
 
 		assert (tu.dims() == 1);
 
-		if (tu.type().isString()) {
+		if (tu.isString()) {
 			String s = file_.stringFromData(ia.address(), (int) ia.size() - 1);
 			return buildString(s);
 		}
@@ -566,14 +647,13 @@ public class SourceBuilder {
 	}
 
 	private String buildArgDeclaration(Argument arg) {
-		String prefix = arg.type() == VariableType.Reference ? "&" : "";
-		String decl = prefix + buildTag(arg.tag()) + arg.name();
+		String decl = buildType(arg) + arg.name();
 		if (arg.dimensions() != null) {
 			for (int i = 0; i < arg.dimensions().length; i++) {
 				Dimension dim = arg.dimensions()[i];
 				decl += "[";
 				if (dim.size() >= 1) {
-					if (arg.tag() != null && arg.tag().name().equals("String"))
+					if (arg.isString())
 						decl += dim.size() * 4;
 					else
 						decl += dim.size();
@@ -585,14 +665,13 @@ public class SourceBuilder {
 	}
 
 	private String buildVarDeclaration(Variable var) {
-		String prefix = var.type() == VariableType.Reference ? "&" : "";
-		String decl = prefix + buildTag(var.tag()) + var.name();
+		String decl = buildType(var) + var.name();
 		if (var.dims() != null) {
 			for (int i = 0; i < var.dims().length; i++) {
 				Dimension dim = var.dims()[i];
 				decl += "[";
 				if (dim.size() >= 1) {
-					if (var.tag() != null && var.tag().name().equals("String") && i == var.dims().length - 1)
+					if (var.isString() && i == var.dims().length - 1)
 						decl += dim.size() * 4;
 					else
 						decl += dim.size();
@@ -957,6 +1036,7 @@ public class SourceBuilder {
 		//  = 0x03 (ETX) - Use team color from this point forward
 		//  = 0x04 (EOT) - Use location color from this point forward
 		//  = 0x01 (SOH) - Use normal color from this point forward
+		str = str.replace("\u0000", "\\x00");
 		str = str.replace("\u0001", "\\x01"); // Default
 		str = str.replace("\u0002", "\\x02"); // Teamcolor at start
 		str = str.replace("\u0003", "\\x03"); // Teamcolor
@@ -966,6 +1046,7 @@ public class SourceBuilder {
 		str = str.replace("\u0007", "\\x07"); // followed by a hex code in RRGGBB format
 		str = str.replace("\u0008", "\\x08"); // followed by a hex code with alpha in RRGGBBAA format
 		str = str.replace("\u0009", "\\x09");
+		str = str.replace("\n", "\\n");
 		str = str.replace("\u000B", "\\x0B");
 		str = str.replace("\u000C", "\\x0C");
 		str = str.replace("\u000E", "\\x0E");
@@ -1018,7 +1099,7 @@ public class SourceBuilder {
 		int[] dims = new int[var.dims().length];
 		for (int i = 0; i < var.dims().length; i++)
 			dims[i] = var.dims()[i].size();
-		if (var.tag() != null && var.tag().name().equals("String"))
+		if (var.isString())
 			dims[dims.length - 1] /= 4;
 
 		// Don't try to print an array with invalid indirection vectors.
@@ -1205,7 +1286,7 @@ public class SourceBuilder {
 			outputLine("time = " + buildString(time));
 			decreaseIndent();
 			outputLine("};");
-		} else if (var.tag() != null && var.tag().name().equals("String")) {
+		} else if (var.isString()) {
 			if (var.dims().length == 1) {
 				String text = decl + " String:" + var.name() + "[" + var.dims()[0].size() * 4 + "]";
 				String primer = file_.stringFromData(var.address());
@@ -1213,7 +1294,7 @@ public class SourceBuilder {
 					text += " = " + buildString(primer);
 				outputLine(text + ";");
 			} else {
-				String text = decl + " " + buildTag(var.tag()) + var.name();
+				String text = decl + " " + buildType(var) + var.name();
 				if (var.dims() != null) {
 					for (int i = 0; i < var.dims().length; i++) {
 						// Display the correct number of bytes for the last dim of a string array
@@ -1239,7 +1320,7 @@ public class SourceBuilder {
 				outputLine("};");
 			}
 		} else if (var.dims() == null || var.dims().length == 0) {
-			String text = decl + " " + buildTag(var.tag()) + var.name();
+			String text = decl + " " + buildType(var) + var.name();
 
 			long value = file_.int32FromData(var.address());
 			if (value != 0) {
@@ -1255,14 +1336,14 @@ public class SourceBuilder {
 
 			outputLine(text);
 		} else if (isArrayEmpty(var)) {
-			String text = decl + " " + buildTag(var.tag()) + var.name();
+			String text = decl + " " + buildType(var) + var.name();
 			if (var.dims() != null) {
 				for (int i = 0; i < var.dims().length; i++)
 					text += "[" + var.dims()[i].size() + "]";
 			}
 			outputLine(text + ";");
 		} else {
-			String text = decl + " " + buildTag(var.tag()) + var.name();
+			String text = decl + " " + buildType(var) + var.name();
 			if (var.dims() != null) {
 				for (int i = 0; i < var.dims().length; i++)
 					text += "[" + var.dims()[i].size() + "]";

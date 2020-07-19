@@ -1,0 +1,3009 @@
+public PlVers:__version =
+{
+	version = 5,
+	filevers = "1.10.0.6484",
+	date = "04/21/2020",
+	time = "18:15:19"
+};
+new Float:NULL_VECTOR[3];
+new String:NULL_STRING[16];
+public Extension:__ext_core =
+{
+	name = "Core",
+	file = "core",
+	autoload = 0,
+	required = 0,
+};
+new MaxClients;
+public Extension:__ext_sdktools =
+{
+	name = "SDKTools",
+	file = "sdktools.ext",
+	autoload = 1,
+	required = 1,
+};
+public Extension:__ext_topmenus =
+{
+	name = "TopMenus",
+	file = "topmenus.ext",
+	autoload = 1,
+	required = 0,
+};
+public SharedPlugin:__pl_adminmenu =
+{
+	name = "adminmenu",
+	file = "adminmenu.smx",
+	required = 0,
+};
+public Plugin:myinfo =
+{
+	name = "Fun Commands",
+	description = "Fun Commands",
+	author = "AlliedModders LLC",
+	version = "1.10.0.6484",
+	url = "http://www.sourcemod.net/"
+};
+new TopMenu:hTopMenu;
+new String:g_BlipSound[1024];
+new String:g_BeepSound[1024];
+new String:g_FinalSound[1024];
+new String:g_BoomSound[1024];
+new String:g_FreezeSound[1024];
+new g_BeamSprite = -1;
+new g_BeamSprite2 = -1;
+new g_HaloSprite = -1;
+new g_GlowSprite = -1;
+new g_ExplosionSprite = -1;
+new redColor[4] =
+{
+	255, 75, 75, 255
+};
+new orangeColor[4] =
+{
+	255, 128, 0, 255
+};
+new greenColor[4] =
+{
+	75, 255, 75, 255
+};
+new blueColor[4] =
+{
+	75, 75, 255, 255
+};
+new whiteColor[4] =
+{
+	255, ...
+};
+new greyColor[4] =
+{
+	128, 128, 128, 255
+};
+new UserMsg:g_FadeUserMsgId;
+new g_Serial_Gen;
+new EngineVersion:g_GameEngine;
+new g_BeaconSerial[66];
+new ConVar:g_Cvar_BeaconRadius;
+new g_TimeBombSerial[66];
+new g_TimeBombTime[66];
+new ConVar:g_Cvar_TimeBombTicks;
+new ConVar:g_Cvar_TimeBombRadius;
+new ConVar:g_Cvar_TimeBombMode;
+new g_FireBombSerial[66];
+new g_FireBombTime[66];
+new ConVar:g_Cvar_BurnDuration;
+new ConVar:g_Cvar_FireBombTicks;
+new ConVar:g_Cvar_FireBombRadius;
+new ConVar:g_Cvar_FireBombMode;
+new g_FreezeSerial[66];
+new g_FreezeBombSerial[66];
+new g_FreezeTime[66];
+new g_FreezeBombTime[66];
+new ConVar:g_Cvar_FreezeDuration;
+new ConVar:g_Cvar_FreezeBombTicks;
+new ConVar:g_Cvar_FreezeBombRadius;
+new ConVar:g_Cvar_FreezeBombMode;
+new g_GravityTarget[66];
+new g_BlindTarget[66];
+new Handle:g_DrugTimers[66];
+new Float:g_DrugAngles[20] =
+{
+	0, 1084227584, 1092616192, 1097859072, 1101004800, 1103626240, 1101004800, 1097859072, 1092616192, 1084227584, 0, -1063256064, -1054867456, -1049624576, -1046478848, -1043857408, -1046478848, -1049624576, -1054867456, -1063256064
+};
+void:DisplayBeaconMenu(client)
+{
+	new Menu:menu = Menu.Menu(167, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Beacon player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:CreateTimeBomb(client)
+{
+	g_Serial_Gen += 1;
+	g_TimeBombSerial[client] = g_Serial_Gen;
+	CreateTimer(1.0, 207, g_Serial_Gen << 7 | client, 3);
+	g_TimeBombTime[client] = ConVar.IntValue.get(g_Cvar_TimeBombTicks);
+	return 0;
+}
+
+void:KillTimeBomb(client)
+{
+	g_TimeBombSerial[client] = 0;
+	if (IsClientInGame(client))
+	{
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+	}
+	return 0;
+}
+
+void:KillAllTimeBombs()
+{
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		KillTimeBomb(i);
+		i++;
+	}
+	return 0;
+}
+
+void:PerformTimeBomb(client, target)
+{
+	if (g_TimeBombSerial[target])
+	{
+		KillTimeBomb(target);
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+		LogAction(client, target, "\"%L\" removed a TimeBomb on \"%L\"", client, target);
+	}
+	else
+	{
+		CreateTimeBomb(target);
+		LogAction(client, target, "\"%L\" set a TimeBomb on \"%L\"", client, target);
+	}
+	return 0;
+}
+
+void:DisplayTimeBombMenu(client)
+{
+	new Menu:menu = Menu.Menu(187, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "TimeBomb player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:CreateFireBomb(client)
+{
+	g_Serial_Gen += 1;
+	g_FireBombSerial[client] = g_Serial_Gen;
+	CreateTimer(1.0, 201, g_Serial_Gen << 7 | client, 3);
+	g_FireBombTime[client] = ConVar.IntValue.get(g_Cvar_FireBombTicks);
+	return 0;
+}
+
+void:KillFireBomb(client)
+{
+	g_FireBombSerial[client] = 0;
+	if (IsClientInGame(client))
+	{
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+	}
+	return 0;
+}
+
+void:KillAllFireBombs()
+{
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		KillFireBomb(i);
+		i++;
+	}
+	return 0;
+}
+
+void:PerformBurn(client, target, Float:seconds)
+{
+	IgniteEntity(target, seconds, false, 0.0, false);
+	LogAction(client, target, "\"%L\" ignited \"%L\" (seconds \"%f\")", client, target, seconds);
+	return 0;
+}
+
+void:PerformFireBomb(client, target)
+{
+	if (g_FireBombSerial[client])
+	{
+		KillFireBomb(target);
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+		LogAction(client, target, "\"%L\" removed a FireBomb on \"%L\"", client, target);
+	}
+	else
+	{
+		CreateFireBomb(target);
+		LogAction(client, target, "\"%L\" set a FireBomb on \"%L\"", client, target);
+	}
+	return 0;
+}
+
+void:DisplayBurnMenu(client)
+{
+	new Menu:menu = Menu.Menu(171, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Burn player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:DisplayFireBombMenu(client)
+{
+	new Menu:menu = Menu.Menu(175, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "FireBomb player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:FreezeClient(client, time)
+{
+	if (g_FreezeSerial[client])
+	{
+		UnfreezeClient(client);
+		return 0;
+	}
+	SetEntityMoveType(client, 0);
+	SetEntityRenderColor(client, 0, 128, 255, 192);
+	if (g_FreezeSound[0])
+	{
+		new Float:vec[3] = 0.0;
+		GetClientEyePosition(client, vec);
+		EmitAmbientSound(g_FreezeSound, vec, client, 130, 0, 1.0, 100, 0.0);
+	}
+	g_FreezeTime[client] = time;
+	g_Serial_Gen += 1;
+	g_FreezeSerial[client] = g_Serial_Gen;
+	CreateTimer(1.0, 203, g_Serial_Gen << 7 | client, 3);
+	return 0;
+}
+
+void:UnfreezeClient(client)
+{
+	g_FreezeSerial[client] = 0;
+	g_FreezeTime[client] = 0;
+	if (IsClientInGame(client))
+	{
+		if (g_FreezeSound[0])
+		{
+			new Float:vec[3] = 0.0;
+			GetClientAbsOrigin(client, vec);
+			new var1 = vec[2];
+			var1 = 5+0(var1, 10);
+			GetClientEyePosition(client, vec);
+			EmitAmbientSound(g_FreezeSound, vec, client, 130, 0, 1.0, 100, 0.0);
+		}
+		SetEntityMoveType(client, 2);
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+	}
+	return 0;
+}
+
+void:CreateFreezeBomb(client)
+{
+	if (g_FreezeBombSerial[client])
+	{
+		KillFreezeBomb(client);
+		return 0;
+	}
+	g_FreezeBombTime[client] = ConVar.IntValue.get(g_Cvar_FreezeBombTicks);
+	g_Serial_Gen += 1;
+	g_FreezeBombSerial[client] = g_Serial_Gen;
+	CreateTimer(1.0, 205, g_Serial_Gen << 7 | client, 3);
+	return 0;
+}
+
+void:KillFreezeBomb(client)
+{
+	g_FreezeBombSerial[client] = 0;
+	g_FreezeBombTime[client] = 0;
+	if (IsClientInGame(client))
+	{
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+	}
+	return 0;
+}
+
+void:KillAllFreezes()
+{
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		if (g_FreezeSerial[i])
+		{
+			UnfreezeClient(i);
+		}
+		if (g_FreezeBombSerial[i])
+		{
+			KillFreezeBomb(i);
+		}
+		i++;
+	}
+	return 0;
+}
+
+void:PerformFreeze(client, target, time)
+{
+	FreezeClient(target, time);
+	LogAction(client, target, "\"%L\" froze \"%L\"", client, target);
+	return 0;
+}
+
+void:PerformFreezeBomb(client, target)
+{
+	if (g_FreezeBombSerial[target])
+	{
+		KillFreezeBomb(target);
+		LogAction(client, target, "\"%L\" removed a FreezeBomb on \"%L\"", client, target);
+	}
+	else
+	{
+		CreateFreezeBomb(target);
+		LogAction(client, target, "\"%L\" set a FreezeBomb on \"%L\"", client, target);
+	}
+	return 0;
+}
+
+Float:5*0(Float:oper1, oper2)
+{
+	return oper1 * float(oper2);
+}
+
+Float:5+0(Float:oper1, oper2)
+{
+	return oper1 + float(oper2);
+}
+
+Protobuf:UserMessageToProtobuf(Handle:msg)
+{
+	if (GetUserMessageType() != 1)
+	{
+		return 0;
+	}
+	return msg;
+}
+
+BfWrite:UserMessageToBfWrite(Handle:msg)
+{
+	if (GetUserMessageType() == 1)
+	{
+		return 0;
+	}
+	return msg;
+}
+
+void:PrintCenterTextAll(String:format[], any:_arg1)
+{
+	new String:buffer[1024];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		if (IsClientInGame(i))
+		{
+			SetGlobalTransTarget(i);
+			VFormat(buffer, 254, format[0], 2);
+			PrintCenterText(i, "%s", buffer);
+		}
+		i++;
+	}
+	return 0;
+}
+
+void:DisplayFreezeMenu(client)
+{
+	new Menu:menu = Menu.Menu(177, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Freeze player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:DisplayFreezeBombMenu(client)
+{
+	new Menu:menu = Menu.Menu(179, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "FreezeBomb player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:ReplyToTargetError(client, reason)
+{
+	switch (reason)
+	{
+		case -7:
+		{
+			ReplyToCommand(client, "[SM] %t", 2496);
+		}
+		case -6:
+		{
+			ReplyToCommand(client, "[SM] %t", 2468);
+		}
+		case -5:
+		{
+			ReplyToCommand(client, "[SM] %t", 2440);
+		}
+		case -4:
+		{
+			ReplyToCommand(client, "[SM] %t", 2412);
+		}
+		case -3:
+		{
+			ReplyToCommand(client, "[SM] %t", 2380);
+		}
+		case -2:
+		{
+			ReplyToCommand(client, "[SM] %t", 2352);
+		}
+		case -1:
+		{
+			ReplyToCommand(client, "[SM] %t", 2320);
+		}
+		case 0:
+		{
+			ReplyToCommand(client, "[SM] %t", 2292);
+		}
+		default:
+		{
+		}
+	}
+	return 0;
+}
+
+void:PerformGravity(client, target, Float:amount)
+{
+	SetEntityGravity(target, amount);
+	LogAction(client, target, "\"%L\" set gravity on \"%L\" (amount \"%f\")", client, target, amount);
+	return 0;
+}
+
+void:DisplayGravityMenu(client)
+{
+	new Menu:menu = Menu.Menu(181, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Gravity player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:DisplayGravityAmountMenu(client)
+{
+	new Menu:menu = Menu.Menu(183, 28);
+	new String:title[400];
+	Format(title, 100, "%T: %N", "Gravity amount", client, GetClientOfUserId(g_GravityTarget[client]));
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTranslatedMenuItem(menu, "4.0", "Gravity Very High", client);
+	AddTranslatedMenuItem(menu, "2.0", "Gravity High", client);
+	AddTranslatedMenuItem(menu, "1.0", "Gravity Normal", client);
+	AddTranslatedMenuItem(menu, "0.5", "Gravity Low", client);
+	AddTranslatedMenuItem(menu, "0.1", "Gravity Very Low", client);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+Handle:FindPluginByFile(String:filename[])
+{
+	new String:buffer[1024];
+	new Handle:iter = GetPluginIterator();
+	new Handle:pl;
+	while (MorePlugins(iter))
+	{
+		pl = ReadPlugin(iter);
+		GetPluginFilename(pl, buffer, 256);
+		if (!(strcmp(buffer, filename[0], false)))
+		{
+			CloseHandle(iter);
+			return pl;
+		}
+	}
+	CloseHandle(iter);
+	return 0;
+}
+
+void:PerformBlind(client, target, amount)
+{
+	new targets[2];
+	targets[0] = target;
+	new duration = 1536;
+	new holdtime = 1536;
+	new flags;
+	if (amount)
+	{
+		flags = 10;
+	}
+	else
+	{
+		flags = 17;
+	}
+	new color[4];
+	color[3] = amount;
+	new Handle:message = StartMessageEx(g_FadeUserMsgId, targets, 1, 0);
+	if (GetUserMessageType() == 1)
+	{
+		new Protobuf:pb = UserMessageToProtobuf(message);
+		Protobuf.SetInt(pb, "duration", duration, -1);
+		Protobuf.SetInt(pb, "hold_time", holdtime, -1);
+		Protobuf.SetInt(pb, "flags", flags, -1);
+		Protobuf.SetColor(pb, "clr", color, -1);
+	}
+	else
+	{
+		new BfWrite:bf = UserMessageToBfWrite(message);
+		BfWrite.WriteShort(bf, duration);
+		BfWrite.WriteShort(bf, holdtime);
+		BfWrite.WriteShort(bf, flags);
+		BfWrite.WriteByte(bf, color[0]);
+		BfWrite.WriteByte(bf, color[1]);
+		BfWrite.WriteByte(bf, color[2]);
+		BfWrite.WriteByte(bf, color[3]);
+	}
+	EndMessage();
+	LogAction(client, target, "\"%L\" set blind on \"%L\" (amount \"%d\")", client, target, amount);
+	return 0;
+}
+
+GetEntSendPropOffs(ent, String:prop[], bool:actual)
+{
+	new String:cls[256];
+	if (GetEntityNetClass(ent, cls, 64))
+	{
+		new local = -1;
+		new offset = FindSendPropInfo(cls, prop[0], 0, 0, local);
+		if (actual)
+		{
+			return offset;
+		}
+		return local;
+	}
+	return -1;
+}
+
+void:DisplayBlindMenu(client)
+{
+	new Menu:menu = Menu.Menu(169, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Blind player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:DisplayAmountMenu(client)
+{
+	new Menu:menu = Menu.Menu(165, 28);
+	new String:title[400];
+	Format(title, 100, "%T: %N", "Blind amount", client, GetClientOfUserId(g_BlindTarget[client]));
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTranslatedMenuItem(menu, "255", "Fully blind", client);
+	AddTranslatedMenuItem(menu, "240", "Half blind", client);
+	AddTranslatedMenuItem(menu, "0", "No blind", client);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+MoveType:GetEntityMoveType(entity)
+{
+	static bool:gotconfig;
+	static String:datamap[128];
+	if (!gotconfig)
+	{
+		new GameData:gc = GameData.GameData("core.games");
+		new bool:exists = GameData.GetKeyValue(gc, "m_MoveType", datamap, 32);
+		CloseHandle(gc);
+		gc = 0;
+		if (!exists)
+		{
+			strcopy(datamap, 32, "m_MoveType");
+		}
+		gotconfig = true;
+	}
+	return GetEntProp(entity, 1, datamap, 4, 0);
+}
+
+void:PerformNoClip(client, target)
+{
+	new MoveType:movetype = GetEntityMoveType(target);
+	if (movetype != 8)
+	{
+		SetEntityMoveType(target, 8);
+	}
+	else
+	{
+		SetEntityMoveType(target, 2);
+	}
+	LogAction(client, target, "\"%L\" toggled noclip on \"%L\"", client, target);
+	return 0;
+}
+
+void:DisplayNoClipMenu(client)
+{
+	new Menu:menu = Menu.Menu(185, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "NoClip player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:SetEntityMoveType(entity, MoveType:mt)
+{
+	static bool:gotconfig;
+	static String:datamap[128];
+	if (!gotconfig)
+	{
+		new GameData:gc = GameData.GameData("core.games");
+		new bool:exists = GameData.GetKeyValue(gc, "m_MoveType", datamap, 32);
+		CloseHandle(gc);
+		gc = 0;
+		if (!exists)
+		{
+			strcopy(datamap, 32, "m_MoveType");
+		}
+		gotconfig = true;
+	}
+	SetEntProp(entity, 1, datamap, mt, 4, 0);
+	return 0;
+}
+
+void:CreateDrug(client)
+{
+	g_DrugTimers[client] = CreateTimer(1.0, 199, client, 1);
+	return 0;
+}
+
+void:KillDrug(client)
+{
+	KillDrugTimer(client);
+	new Float:angs[3] = 0.0;
+	GetClientEyeAngles(client, angs);
+	angs[2] = 0.0;
+	TeleportEntity(client, NULL_VECTOR, angs, NULL_VECTOR);
+	new clients[2];
+	clients[0] = client;
+	new duration = 1536;
+	new holdtime = 1536;
+	new flags = 17;
+	new color[4];
+	new Handle:message = StartMessageEx(g_FadeUserMsgId, clients, 1, 0);
+	if (GetUserMessageType() == 1)
+	{
+		new Protobuf:pb = UserMessageToProtobuf(message);
+		Protobuf.SetInt(pb, "duration", duration, -1);
+		Protobuf.SetInt(pb, "hold_time", holdtime, -1);
+		Protobuf.SetInt(pb, "flags", flags, -1);
+		Protobuf.SetColor(pb, "clr", color, -1);
+	}
+	else
+	{
+		new BfWrite:bf = UserMessageToBfWrite(message);
+		BfWrite.WriteShort(bf, duration);
+		BfWrite.WriteShort(bf, holdtime);
+		BfWrite.WriteShort(bf, flags);
+		BfWrite.WriteByte(bf, color[0]);
+		BfWrite.WriteByte(bf, color[1]);
+		BfWrite.WriteByte(bf, color[2]);
+		BfWrite.WriteByte(bf, color[3]);
+	}
+	EndMessage();
+	return 0;
+}
+
+void:KillDrugTimer(client)
+{
+	KillTimer(g_DrugTimers[client], false);
+	g_DrugTimers[client] = 0;
+	return 0;
+}
+
+void:KillAllDrugs()
+{
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		if (g_DrugTimers[i])
+		{
+			if (IsClientInGame(i))
+			{
+				KillDrug(i);
+			}
+			KillDrugTimer(i);
+		}
+		i++;
+	}
+	return 0;
+}
+
+void:PerformDrug(client, target, toggle)
+{
+	switch (toggle)
+	{
+		case 0:
+		{
+			if (g_DrugTimers[target])
+			{
+				KillDrug(target);
+				LogAction(client, target, "\"%L\" undrugged \"%L\"", client, target);
+			}
+		}
+		case 1:
+		{
+			if (g_DrugTimers[target])
+			{
+			}
+			else
+			{
+				CreateDrug(target);
+				LogAction(client, target, "\"%L\" drugged \"%L\"", client, target);
+			}
+		}
+		case 2:
+		{
+			if (g_DrugTimers[target])
+			{
+				KillDrug(target);
+				LogAction(client, target, "\"%L\" undrugged \"%L\"", client, target);
+			}
+			else
+			{
+				CreateDrug(target);
+				LogAction(client, target, "\"%L\" drugged \"%L\"", client, target);
+			}
+		}
+		default:
+		{
+		}
+	}
+	return 0;
+}
+
+void:SetEntityRenderColor(entity, r, g, b, a)
+{
+	static bool:gotconfig;
+	static String:prop[128];
+	if (!gotconfig)
+	{
+		new GameData:gc = GameData.GameData("core.games");
+		new bool:exists = GameData.GetKeyValue(gc, "m_clrRender", prop, 32);
+		CloseHandle(gc);
+		gc = 0;
+		if (!exists)
+		{
+			strcopy(prop, 32, "m_clrRender");
+		}
+		gotconfig = true;
+	}
+	new offset = GetEntSendPropOffs(entity, prop, false);
+	if (0 >= offset)
+	{
+		ThrowError("SetEntityRenderColor not supported by this mod");
+	}
+	SetEntData(entity, offset, r, 1, true);
+	SetEntData(entity, offset + 1, g, 1, true);
+	SetEntData(entity, offset + 2, b, 1, true);
+	SetEntData(entity, offset + 3, a, 1, true);
+	return 0;
+}
+
+void:DisplayDrugMenu(client)
+{
+	new Menu:menu = Menu.Menu(173, 28);
+	new String:title[400];
+	Format(title, 100, "%T:", "Drug player", client);
+	Menu.SetTitle(menu, title);
+	Menu.ExitBackButton.set(menu, true);
+	AddTargetsToMenu(menu, client, true, true);
+	Menu.Display(menu, client, 0);
+	return 0;
+}
+
+void:RegisterCvars()
+{
+	g_Cvar_BeaconRadius = CreateConVar("sm_beacon_radius", "375", "Sets the radius for beacon's light rings.", 0, true, 50.0, true, 1500.0);
+	g_Cvar_TimeBombTicks = CreateConVar("sm_timebomb_ticks", "10.0", "Sets how long the timebomb fuse is.", 0, true, 5.0, true, 120.0);
+	g_Cvar_TimeBombRadius = CreateConVar("sm_timebomb_radius", "600", "Sets the bomb blast radius.", 0, true, 50.0, true, 3000.0);
+	g_Cvar_TimeBombMode = CreateConVar("sm_timebomb_mode", "0", "Who is killed by the timebomb? 0 = Target only, 1 = Target's team, 2 = Everyone", 0, true, 0.0, true, 2.0);
+	g_Cvar_BurnDuration = CreateConVar("sm_burn_duration", "20.0", "Sets the default duration of sm_burn and firebomb victims.", 0, true, 0.5, true, 20.0);
+	g_Cvar_FireBombTicks = CreateConVar("sm_firebomb_ticks", "10.0", "Sets how long the FireBomb fuse is.", 0, true, 5.0, true, 120.0);
+	g_Cvar_FireBombRadius = CreateConVar("sm_firebomb_radius", "600", "Sets the bomb blast radius.", 0, true, 50.0, true, 3000.0);
+	g_Cvar_FireBombMode = CreateConVar("sm_firebomb_mode", "0", "Who is targetted by the FireBomb? 0 = Target only, 1 = Target's team, 2 = Everyone", 0, true, 0.0, true, 2.0);
+	g_Cvar_FreezeDuration = CreateConVar("sm_freeze_duration", "10.0", "Sets the default duration for sm_freeze and freezebomb victims", 0, true, 1.0, true, 120.0);
+	g_Cvar_FreezeBombTicks = CreateConVar("sm_freezebomb_ticks", "10.0", "Sets how long the freezebomb fuse is.", 0, true, 5.0, true, 120.0);
+	g_Cvar_FreezeBombRadius = CreateConVar("sm_freezebomb_radius", "600", "Sets the freezebomb blast radius.", 0, true, 50.0, true, 3000.0);
+	g_Cvar_FreezeBombMode = CreateConVar("sm_freezebomb_mode", "0", "Who is targetted by the freezebomb? 0 = Target only, 1 = Target's team, 2 = Everyone", 0, true, 0.0, true, 2.0);
+	AutoExecConfig(true, "funcommands", "sourcemod");
+	return 0;
+}
+
+void:RegisterCmds()
+{
+	RegAdminCmd("sm_beacon", 143, 32, "sm_beacon <#userid|name> [0/1]", "", 0);
+	RegAdminCmd("sm_timebomb", 161, 32, "sm_timebomb <#userid|name> [0/1]", "", 0);
+	RegAdminCmd("sm_burn", 147, 32, "sm_burn <#userid|name> [time]", "", 0);
+	RegAdminCmd("sm_firebomb", 151, 32, "sm_firebomb <#userid|name> [0/1]", "", 0);
+	RegAdminCmd("sm_freeze", 153, 32, "sm_freeze <#userid|name> [time]", "", 0);
+	RegAdminCmd("sm_freezebomb", 155, 32, "sm_freezebomb <#userid|name> [0/1]", "", 0);
+	RegAdminCmd("sm_gravity", 157, 32, "sm_gravity <#userid|name> [amount] - Leave amount off to reset. Amount is 0.0 through 5.0", "", 0);
+	RegAdminCmd("sm_blind", 145, 32, "sm_blind <#userid|name> [amount] - Leave amount off to reset.", "", 0);
+	RegAdminCmd("sm_noclip", 159, 8224, "sm_noclip <#userid|name>", "", 0);
+	RegAdminCmd("sm_drug", 149, 32, "sm_drug <#userid|name> [0/1]", "", 0);
+	return 0;
+}
+
+void:HookEvents()
+{
+	new String:folder[256];
+	GetGameFolderName(folder, 64);
+	if (strcmp(folder, "tf", true))
+	{
+		if (strcmp(folder, "nucleardawn", true))
+		{
+			HookEvent("round_end", 163, 2);
+		}
+		HookEvent("round_win", 163, 2);
+	}
+	else
+	{
+		HookEvent("teamplay_win_panel", 163, 2);
+		HookEvent("teamplay_restart_round", 163, 2);
+		HookEvent("arena_win_panel", 163, 2);
+	}
+	return 0;
+}
+
+void:SetEntityGravity(entity, Float:amount)
+{
+	static bool:gotconfig;
+	static String:datamap[128];
+	if (!gotconfig)
+	{
+		new GameData:gc = GameData.GameData("core.games");
+		new bool:exists = GameData.GetKeyValue(gc, "m_flGravity", datamap, 32);
+		CloseHandle(gc);
+		gc = 0;
+		if (!exists)
+		{
+			strcopy(datamap, 32, "m_flGravity");
+		}
+		gotconfig = true;
+	}
+	SetEntPropFloat(entity, 1, datamap, amount, 0);
+	return 0;
+}
+
+void:AddTranslatedMenuItem(Menu:menu, String:opt[], String:phrase[], client)
+{
+	new String:buffer[512];
+	Format(buffer, 128, "%T", phrase[0], client);
+	Menu.AddItem(menu, opt[0], buffer, 0);
+	return 0;
+}
+
+void:TE_SendToAll(Float:delay)
+{
+	new total;
+	new clients[MaxClients];
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		if (IsClientInGame(i))
+		{
+			total++;
+			clients[0][total] = i;
+		}
+		i++;
+	}
+	TE_Send(clients[0], total, delay);
+	return 0;
+}
+
+void:TE_SetupGlowSprite(Float:pos[3], Model, Float:Life, Float:Size, Brightness)
+{
+	TE_Start("GlowSprite");
+	TE_WriteVector("m_vecOrigin", pos[0]);
+	TE_WriteNum("m_nModelIndex", Model);
+	TE_WriteFloat("m_fScale", Size);
+	TE_WriteFloat("m_fLife", Life);
+	TE_WriteNum("m_nBrightness", Brightness);
+	return 0;
+}
+
+void:TE_SetupExplosion(Float:pos[3], Model, Float:Scale, Framerate, Flags, Radius, Magnitude, Float:normal[3], MaterialType)
+{
+	TE_Start("Explosion");
+	TE_WriteVector("m_vecOrigin[0]", pos[0]);
+	TE_WriteVector("m_vecNormal", normal[0]);
+	TE_WriteNum("m_nModelIndex", Model);
+	TE_WriteFloat("m_fScale", Scale);
+	TE_WriteNum("m_nFrameRate", Framerate);
+	TE_WriteNum("m_nFlags", Flags);
+	TE_WriteNum("m_nRadius", Radius);
+	TE_WriteNum("m_nMagnitude", Magnitude);
+	TE_WriteNum("m_chMaterialType", MaterialType);
+	return 0;
+}
+
+void:TE_SetupBeamRingPoint(Float:center[3], Float:Start_Radius, Float:End_Radius, ModelIndex, HaloIndex, StartFrame, FrameRate, Float:Life, Float:Width, Float:Amplitude, Color[4], Speed, Flags)
+{
+	TE_Start("BeamRingPoint");
+	TE_WriteVector("m_vecCenter", center[0]);
+	TE_WriteFloat("m_flStartRadius", Start_Radius);
+	TE_WriteFloat("m_flEndRadius", End_Radius);
+	TE_WriteNum("m_nModelIndex", ModelIndex);
+	TE_WriteNum("m_nHaloIndex", HaloIndex);
+	TE_WriteNum("m_nStartFrame", StartFrame);
+	TE_WriteNum("m_nFrameRate", FrameRate);
+	TE_WriteFloat("m_fLife", Life);
+	TE_WriteFloat("m_fWidth", Width);
+	TE_WriteFloat("m_fEndWidth", Width);
+	TE_WriteFloat("m_fAmplitude", Amplitude);
+	TE_WriteNum("r", Color[0]);
+	TE_WriteNum("g", Color[0] + 4/* ERROR unknown load Binary */);
+	TE_WriteNum("b", Color[0] + 8/* ERROR unknown load Binary */);
+	TE_WriteNum("a", Color[0] + 12/* ERROR unknown load Binary */);
+	TE_WriteNum("m_nSpeed", Speed);
+	TE_WriteNum("m_nFlags", Flags);
+	TE_WriteNum("m_nFadeLength", 0);
+	return 0;
+}
+
+void:TE_SetupBeamPoints(Float:start[3], Float:end[3], ModelIndex, HaloIndex, StartFrame, FrameRate, Float:Life, Float:Width, Float:EndWidth, FadeLength, Float:Amplitude, Color[4], Speed)
+{
+	TE_Start("BeamPoints");
+	TE_WriteVector("m_vecStartPoint", start[0]);
+	TE_WriteVector("m_vecEndPoint", end[0]);
+	TE_WriteNum("m_nModelIndex", ModelIndex);
+	TE_WriteNum("m_nHaloIndex", HaloIndex);
+	TE_WriteNum("m_nStartFrame", StartFrame);
+	TE_WriteNum("m_nFrameRate", FrameRate);
+	TE_WriteFloat("m_fLife", Life);
+	TE_WriteFloat("m_fWidth", Width);
+	TE_WriteFloat("m_fEndWidth", EndWidth);
+	TE_WriteFloat("m_fAmplitude", Amplitude);
+	TE_WriteNum("r", Color[0]);
+	TE_WriteNum("g", Color[0] + 4/* ERROR unknown load Binary */);
+	TE_WriteNum("b", Color[0] + 8/* ERROR unknown load Binary */);
+	TE_WriteNum("a", Color[0] + 12/* ERROR unknown load Binary */);
+	TE_WriteNum("m_nSpeed", Speed);
+	TE_WriteNum("m_nFadeLength", FadeLength);
+	return 0;
+}
+
+void:CreateBeacon(client)
+{
+	g_Serial_Gen += 1;
+	g_BeaconSerial[client] = g_Serial_Gen;
+	CreateTimer(1.0, 197, g_Serial_Gen << 7 | client, 3);
+	return 0;
+}
+
+void:KillBeacon(client)
+{
+	g_BeaconSerial[client] = 0;
+	if (IsClientInGame(client))
+	{
+		SetEntityRenderColor(client, 255, 255, 255, 255);
+	}
+	return 0;
+}
+
+void:KillAllBeacons()
+{
+	new i = 1;
+	while (i <= MaxClients)
+	{
+		KillBeacon(i);
+		i++;
+	}
+	return 0;
+}
+
+void:PerformBeacon(client, target)
+{
+	if (g_BeaconSerial[target])
+	{
+		KillBeacon(target);
+		LogAction(client, target, "\"%L\" removed a beacon on \"%L\"", client, target);
+	}
+	else
+	{
+		CreateBeacon(target);
+		LogAction(client, target, "\"%L\" set a beacon on \"%L\"", client, target);
+	}
+	return 0;
+}
+
+public void:AdminMenu_Beacon(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayBeaconMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Beacon player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_Blind(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayBlindMenu(param);
+		}
+		if (action == 3)
+		{
+			new var1;
+			if (g_FadeUserMsgId == -1)
+			{
+				var1 = 6;
+			}
+			else
+			{
+				var1 = 0;
+			}
+			buffer[0] = var1;
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Blind player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_Burn(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayBurnMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Burn player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_Drug(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayDrugMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Drug player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_FireBomb(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayFireBombMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "FireBomb player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_Freeze(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayFreezeMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Freeze player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_FreezeBomb(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayFreezeBombMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "FreezeBomb player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_Gravity(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayGravityMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "Gravity player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_NoClip(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayNoClipMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "NoClip player", param);
+	}
+	return 0;
+}
+
+public void:AdminMenu_TimeBomb(TopMenu:topmenu, TopMenuAction:action, TopMenuObject:object_id, param, String:buffer[], maxlength)
+{
+	if (action)
+	{
+		if (action == 2)
+		{
+			DisplayTimeBombMenu(param);
+		}
+	}
+	else
+	{
+		Format(buffer[0], maxlength, "%T", "TimeBomb player", param);
+	}
+	return 0;
+}
+
+public Action:Command_Beacon(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_beacon <#userid|name>");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformBeacon(client, target_list[i]);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled beacon on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled beacon on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_Blind(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_blind <#userid|name> [amount]");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new amount;
+	if (args > 1)
+	{
+		new String:arg2[80];
+		GetCmdArg(2, arg2, 20);
+		if (StringToIntEx(arg2, amount, 10))
+		{
+			if (0 > amount)
+			{
+				amount = 0;
+			}
+			if (amount > 255)
+			{
+				amount = 255;
+			}
+		}
+		ReplyToCommand(client, "[SM] %t", 11608);
+		return 3;
+	}
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformBlind(client, target_list[i], amount);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Set blind on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Set blind on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_Burn(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_burn <#userid|name> [time]");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new Float:seconds = ConVar.FloatValue.get(g_Cvar_BurnDuration);
+	if (args > 1)
+	{
+		new String:time[80];
+		GetCmdArg(2, time, 20);
+		if (!(StringToFloatEx(time, seconds)))
+		{
+			ReplyToCommand(client, "[SM] %t", 8116);
+			return 3;
+		}
+	}
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformBurn(client, target_list[i], seconds);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Set target on fire", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Set target on fire", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_Drug(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_drug <#userid|name> [0/1]");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new toggle = 2;
+	if (args > 1)
+	{
+		new String:arg2[16];
+		GetCmdArg(2, arg2, 2);
+		if (StringToInt(arg2, 10))
+		{
+			toggle = 1;
+		}
+		else
+		{
+			toggle = 0;
+		}
+	}
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformDrug(client, target_list[i], toggle);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled drug on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled drug on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_FireBomb(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_firebomb <#userid|name>");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformFireBomb(client, target_list[i]);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled FireBomb on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled FireBomb on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_Freeze(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_freeze <#userid|name> [time]");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new seconds = ConVar.IntValue.get(g_Cvar_FreezeDuration);
+	if (args > 1)
+	{
+		new String:time[80];
+		GetCmdArg(2, time, 20);
+		if (!(StringToIntEx(time, seconds, 10)))
+		{
+			ReplyToCommand(client, "[SM] %t", 9936);
+			return 3;
+		}
+	}
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformFreeze(client, target_list[i], seconds);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Froze target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Froze target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_FreezeBomb(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_freezebomb <#userid|name>");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformFreezeBomb(client, target_list[i]);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled FreezeBomb on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled FreezeBomb on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_Gravity(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_gravity <#userid|name> [amount]");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new Float:amount = 1.0;
+	if (args > 1)
+	{
+		new String:arg2[80];
+		GetCmdArg(2, arg2, 20);
+		if (StringToFloatEx(arg2, amount))
+		{
+			if (amount < 0.0)
+			{
+				amount = 0.0;
+			}
+		}
+		ReplyToCommand(client, "[SM] %t", 10844);
+		return 3;
+	}
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformGravity(client, target_list[i], amount);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Set gravity on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Set gravity on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_NoClip(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_noclip <#userid|name>");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformNoClip(client, target_list[i]);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled noclip on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled noclip on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Command_TimeBomb(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_timebomb <#userid|name>");
+		return 3;
+	}
+	new String:arg[272];
+	GetCmdArg(1, arg, 65);
+	new String:target_name[256];
+	new target_list[65];
+	new target_count;
+	new bool:tn_is_ml;
+	if (0 >= (target_count = ProcessTargetString(arg, client, target_list, 65, 1, target_name, 64, tn_is_ml)))
+	{
+		ReplyToTargetError(client, target_count);
+		return 3;
+	}
+	new i;
+	while (i < target_count)
+	{
+		PerformTimeBomb(client, target_list[i]);
+		i++;
+	}
+	if (tn_is_ml)
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled TimeBomb on target", target_name);
+	}
+	else
+	{
+		ShowActivity2(client, "[SM] ", "%t", "Toggled TimeBomb on target", "_s", target_name);
+	}
+	return 3;
+}
+
+public Action:Event_RoundEnd(Event:event, String:name[], bool:dontBroadcast)
+{
+	KillAllBeacons();
+	KillAllTimeBombs();
+	KillAllFireBombs();
+	KillAllFreezes();
+	KillAllDrugs();
+	return 0;
+}
+
+public MenuHandler_Amount(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new amount;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			amount = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(g_BlindTarget[param1])))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformBlind(param1, target, amount);
+					ShowActivity2(param1, "[SM] ", "%t", "Set blind on target", "_s", name, amount);
+				}
+				PrintToChat(param1, "[SM] %t", 11496);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 11460);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayBlindMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Beacon(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformBeacon(param1, target);
+					ShowActivity2(param1, "[SM] ", "%t", "Toggled beacon on target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 6032);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 5996);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayBeaconMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Blind(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					g_BlindTarget[param1] = userid;
+					DisplayAmountMenu(param1);
+					return 0;
+				}
+				PrintToChat(param1, "[SM] %t", 11432);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 11396);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayBlindMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Burn(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformBurn(param1, target, 20.0);
+					ShowActivity2(param1, "[SM] ", "%t", "Set target on fire", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 7900);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 7864);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayBurnMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Drug(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformDrug(param1, target, 2);
+					ShowActivity2(param1, "[SM] ", "%t", "Toggled drug on target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 12580);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 12544);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayDrugMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_FireBomb(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformFireBomb(param1, target);
+					ShowActivity2(param1, "[SM] ", "%t", "Toggled FireBomb on target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 8000);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 7964);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayFireBombMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Freeze(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformFreeze(param1, target, ConVar.IntValue.get(g_Cvar_FreezeDuration));
+					ShowActivity2(param1, "[SM] ", "%t", "Froze target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 9720);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 9684);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayFreezeMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_FreezeBomb(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformFreezeBomb(param1, target);
+					ShowActivity2(param1, "[SM] ", "%t", "Toggled FreezeBomb on target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 9816);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 9780);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayFreezeBombMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_Gravity(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					g_GravityTarget[param1] = userid;
+					DisplayGravityAmountMenu(param1);
+					return 0;
+				}
+				PrintToChat(param1, "[SM] %t", 10664);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 10628);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayGravityMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_GravityAmount(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new Float:amount = 0.0;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			amount = StringToFloat(info);
+			if ((target = GetClientOfUserId(g_GravityTarget[param1])))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformGravity(param1, target, amount);
+					ShowActivity2(param1, "[SM] ", "%t", "Set gravity on target", "_s", name, amount);
+				}
+				PrintToChat(param1, "[SM] %t", 10728);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 10692);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayGravityMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_NoClip(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformNoClip(param1, target);
+					ShowActivity2(param1, "[SM] ", "%t", "Toggled noclip on target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 11804);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 11768);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayNoClipMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public MenuHandler_TimeBomb(Menu:menu, MenuAction:action, param1, param2)
+{
+	if (action == 16)
+	{
+		CloseHandle(menu);
+		menu = 0;
+	}
+	else
+	{
+		if (action == 8)
+		{
+			new var1;
+			if (param2 == -6 && hTopMenu)
+			{
+				TopMenu.Display(hTopMenu, param1, 3);
+			}
+		}
+		if (action == 4)
+		{
+			new String:info[128];
+			new userid;
+			new target;
+			Menu.GetItem(menu, param2, info, 32, 0, "", 0);
+			userid = StringToInt(info, 10);
+			if ((target = GetClientOfUserId(userid)))
+			{
+				if (CanUserTarget(param1, target))
+				{
+					new String:name[512];
+					GetClientName(target, name, 128);
+					PerformTimeBomb(param1, target);
+					ShowActivity2(param1, "[SM] ", "%t", "Toggled TimeBomb on target", "_s", name);
+				}
+				PrintToChat(param1, "[SM] %t", 6936);
+			}
+			else
+			{
+				PrintToChat(param1, "[SM] %t", 6900);
+			}
+			new var2;
+			if (IsClientInGame(param1) && IsClientInKickQueue(param1))
+			{
+				DisplayTimeBombMenu(param1);
+			}
+		}
+	}
+	return 0;
+}
+
+public void:OnAdminMenuReady(Handle:aTopMenu)
+{
+	new TopMenu:topmenu = TopMenu.FromHandle(aTopMenu);
+	if (hTopMenu == topmenu)
+	{
+		return 0;
+	}
+	hTopMenu = topmenu;
+	new TopMenuObject:player_commands = TopMenu.FindCategory(hTopMenu, "PlayerCommands");
+	if (player_commands)
+	{
+		TopMenu.AddItem(hTopMenu, "sm_beacon", 123, player_commands, "sm_beacon", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_timebomb", 141, player_commands, "sm_timebomb", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_burn", 127, player_commands, "sm_burn", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_firebomb", 131, player_commands, "sm_firebomb", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_freeze", 133, player_commands, "sm_freeze", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_freezebomb", 135, player_commands, "sm_freezebomb", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_gravity", 137, player_commands, "sm_gravity", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_blind", 125, player_commands, "sm_blind", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_noclip", 139, player_commands, "sm_noclip", 32, "");
+		TopMenu.AddItem(hTopMenu, "sm_drug", 129, player_commands, "sm_drug", 32, "");
+	}
+	return 0;
+}
+
+public void:OnMapEnd()
+{
+	KillAllBeacons();
+	KillAllTimeBombs();
+	KillAllFireBombs();
+	KillAllFreezes();
+	KillAllDrugs();
+	return 0;
+}
+
+public void:OnMapStart()
+{
+	new GameData:gameConfig = GameData.GameData("funcommands.games");
+	if (gameConfig)
+	{
+		new var1;
+		if (GameData.GetKeyValue(gameConfig, "SoundBlip", g_BlipSound, 256) && g_BlipSound[0])
+		{
+			PrecacheSound(g_BlipSound, true);
+		}
+		new var2;
+		if (GameData.GetKeyValue(gameConfig, "SoundBeep", g_BeepSound, 256) && g_BeepSound[0])
+		{
+			PrecacheSound(g_BeepSound, true);
+		}
+		new var3;
+		if (GameData.GetKeyValue(gameConfig, "SoundFinal", g_FinalSound, 256) && g_FinalSound[0])
+		{
+			PrecacheSound(g_FinalSound, true);
+		}
+		new var4;
+		if (GameData.GetKeyValue(gameConfig, "SoundBoom", g_BoomSound, 256) && g_BoomSound[0])
+		{
+			PrecacheSound(g_BoomSound, true);
+		}
+		new var5;
+		if (GameData.GetKeyValue(gameConfig, "SoundFreeze", g_FreezeSound, 256) && g_FreezeSound[0])
+		{
+			PrecacheSound(g_FreezeSound, true);
+		}
+		new String:buffer[1024];
+		new var6;
+		if (GameData.GetKeyValue(gameConfig, "SpriteBeam", buffer, 256) && buffer[0])
+		{
+			g_BeamSprite = PrecacheModel(buffer, false);
+		}
+		new var7;
+		if (GameData.GetKeyValue(gameConfig, "SpriteBeam2", buffer, 256) && buffer[0])
+		{
+			g_BeamSprite2 = PrecacheModel(buffer, false);
+		}
+		new var8;
+		if (GameData.GetKeyValue(gameConfig, "SpriteExplosion", buffer, 256) && buffer[0])
+		{
+			g_ExplosionSprite = PrecacheModel(buffer, false);
+		}
+		new var9;
+		if (GameData.GetKeyValue(gameConfig, "SpriteGlow", buffer, 256) && buffer[0])
+		{
+			g_GlowSprite = PrecacheModel(buffer, false);
+		}
+		new var10;
+		if (GameData.GetKeyValue(gameConfig, "SpriteHalo", buffer, 256) && buffer[0])
+		{
+			g_HaloSprite = PrecacheModel(buffer, false);
+		}
+		CloseHandle(gameConfig);
+		gameConfig = 0;
+		return 0;
+	}
+	SetFailState("Unable to load game config funcommands.games");
+	return 0;
+}
+
+public void:OnPluginStart()
+{
+	if (FindPluginByFile("basefuncommands.smx"))
+	{
+		ThrowError("This plugin replaces basefuncommands.  You cannot run both at once.");
+	}
+	LoadTranslations("common.phrases");
+	LoadTranslations("funcommands.phrases");
+	g_GameEngine = GetEngineVersion();
+	g_FadeUserMsgId = GetUserMessageId("Fade");
+	RegisterCvars();
+	RegisterCmds();
+	HookEvents();
+	new TopMenu:topmenu;
+	new var1;
+	if (LibraryExists("adminmenu") && (topmenu = GetAdminTopMenu()))
+	{
+		OnAdminMenuReady(topmenu);
+	}
+	return 0;
+}
+
+public Action:Timer_Beacon(Handle:timer, any:value)
+{
+	new client = value & 127;
+	new serial = value >>> 7;
+	new var1;
+	if (IsClientInGame(client) && IsPlayerAlive(client) && serial == g_BeaconSerial[client])
+	{
+		KillBeacon(client);
+		return 4;
+	}
+	new team = GetClientTeam(client);
+	new Float:vec[3] = 0.0;
+	GetClientAbsOrigin(client, vec);
+	new var3 = vec[2];
+	var3 = 5+0(var3, 10);
+	new var2;
+	if (g_BeamSprite > -1 && g_HaloSprite > -1)
+	{
+		TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_BeaconRadius), g_BeamSprite, g_HaloSprite, 0, 15, 0.5, 5.0, 0.0, greyColor, 10, 0);
+		TE_SendToAll(0.0);
+		if (team == 2)
+		{
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_BeaconRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 10.0, 0.5, redColor, 10, 0);
+		}
+		else
+		{
+			if (team == 3)
+			{
+				TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_BeaconRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 10.0, 0.5, blueColor, 10, 0);
+			}
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_BeaconRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 10.0, 0.5, greenColor, 10, 0);
+		}
+		TE_SendToAll(0.0);
+	}
+	if (g_BlipSound[0])
+	{
+		GetClientEyePosition(client, vec);
+		EmitAmbientSound(g_BlipSound, vec, client, 130, 0, 1.0, 100, 0.0);
+	}
+	return 0;
+}
+
+public Action:Timer_Drug(Handle:timer, any:client)
+{
+	if (IsClientInGame(client))
+	{
+		if (IsPlayerAlive(client))
+		{
+			new Float:angs[3] = 0.0;
+			GetClientEyeAngles(client, angs);
+			angs[2] = g_DrugAngles[GetRandomInt(0, 100) % 20];
+			TeleportEntity(client, NULL_VECTOR, angs, NULL_VECTOR);
+			new clients[2];
+			clients[0] = client;
+			new duration = 255;
+			new holdtime = 255;
+			new flags = 2;
+			new color[4] = {0,0,0,128};
+			color[0] = GetRandomInt(0, 255);
+			color[1] = GetRandomInt(0, 255);
+			color[2] = GetRandomInt(0, 255);
+			new Handle:message = StartMessageEx(g_FadeUserMsgId, clients, 1, 0);
+			if (GetUserMessageType() == 1)
+			{
+				new Protobuf:pb = UserMessageToProtobuf(message);
+				Protobuf.SetInt(pb, "duration", duration, -1);
+				Protobuf.SetInt(pb, "hold_time", holdtime, -1);
+				Protobuf.SetInt(pb, "flags", flags, -1);
+				Protobuf.SetColor(pb, "clr", color, -1);
+			}
+			else
+			{
+				BfWriteShort(message, duration);
+				BfWriteShort(message, holdtime);
+				BfWriteShort(message, flags);
+				BfWriteByte(message, color[0]);
+				BfWriteByte(message, color[1]);
+				BfWriteByte(message, color[2]);
+				BfWriteByte(message, color[3]);
+			}
+			EndMessage();
+			return 3;
+		}
+		KillDrug(client);
+		return 3;
+	}
+	KillDrugTimer(client);
+	return 3;
+}
+
+public Action:Timer_FireBomb(Handle:timer, any:value)
+{
+	new client = value & 127;
+	new serial = value >>> 7;
+	new var1;
+	if (IsClientInGame(client) && IsPlayerAlive(client) && serial == g_FireBombSerial[client])
+	{
+		KillFireBomb(client);
+		return 4;
+	}
+	g_FireBombTime[client]--;
+	new Float:vec[3] = 0.0;
+	GetClientEyePosition(client, vec);
+	if (0 < g_FireBombTime[client])
+	{
+		new color;
+		if (g_FireBombTime[client] > 1)
+		{
+			color = RoundToFloor(5*0(255.0 / ConVar.FloatValue.get(g_Cvar_FireBombTicks), g_FireBombTime[client]));
+			if (g_BeepSound[0])
+			{
+				EmitAmbientSound(g_BeepSound, vec, client, 130, 0, 1.0, 100, 0.0);
+			}
+		}
+		else
+		{
+			color = 0;
+			if (g_FinalSound[0])
+			{
+				EmitAmbientSound(g_FinalSound, vec, client, 130, 0, 1.0, 100, 0.0);
+			}
+		}
+		SetEntityRenderColor(client, 255, color, color, 255);
+		new String:name[512];
+		GetClientName(client, name, 128);
+		PrintCenterTextAll("%t", "Till Explodes", name, g_FireBombTime[client]);
+		new var2;
+		if (g_BeamSprite > -1 && g_HaloSprite > -1)
+		{
+			GetClientAbsOrigin(client, vec);
+			new var7 = vec[2];
+			var7 = 5+0(var7, 10);
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_FireBombRadius) / 3.0, g_BeamSprite, g_HaloSprite, 0, 15, 0.5, 5.0, 0.0, greyColor, 10, 0);
+			TE_SendToAll(0.0);
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_FireBombRadius) / 3.0, g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 10.0, 0.5, whiteColor, 10, 0);
+			TE_SendToAll(0.0);
+		}
+		return 0;
+	}
+	if (g_ExplosionSprite > -1)
+	{
+		TE_SetupExplosion(vec, g_ExplosionSprite, 0.1, 1, 0, ConVar.IntValue.get(g_Cvar_FireBombRadius), 5000, 6840, 67);
+		TE_SendToAll(0.0);
+	}
+	new var3;
+	if (g_BeamSprite > -1 && g_HaloSprite > -1)
+	{
+		GetClientAbsOrigin(client, vec);
+		new var8 = vec[2];
+		var8 = 5+0(var8, 10);
+		TE_SetupBeamRingPoint(vec, 50.0, ConVar.FloatValue.get(g_Cvar_FireBombRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.5, 30.0, 1.5, orangeColor, 5, 0);
+		TE_SendToAll(0.0);
+		new var9 = vec[2];
+		var9 = 5+0(var9, 15);
+		TE_SetupBeamRingPoint(vec, 40.0, ConVar.FloatValue.get(g_Cvar_FireBombRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 30.0, 1.5, orangeColor, 5, 0);
+		TE_SendToAll(0.0);
+		new var10 = vec[2];
+		var10 = 5+0(var10, 15);
+		TE_SetupBeamRingPoint(vec, 30.0, ConVar.FloatValue.get(g_Cvar_FireBombRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.7, 30.0, 1.5, orangeColor, 5, 0);
+		TE_SendToAll(0.0);
+		new var11 = vec[2];
+		var11 = 5+0(var11, 15);
+		TE_SetupBeamRingPoint(vec, 20.0, ConVar.FloatValue.get(g_Cvar_FireBombRadius), g_BeamSprite, g_HaloSprite, 0, 10, 0.8, 30.0, 1.5, orangeColor, 5, 0);
+		TE_SendToAll(0.0);
+	}
+	if (g_BoomSound[0])
+	{
+		EmitAmbientSound(g_BoomSound, vec, client, 130, 0, 1.0, 100, 0.0);
+	}
+	IgniteEntity(client, ConVar.FloatValue.get(g_Cvar_BurnDuration), false, 0.0, false);
+	KillFireBomb(client);
+	SetEntityRenderColor(client, 255, 255, 255, 255);
+	if (0 < ConVar.IntValue.get(g_Cvar_FireBombMode))
+	{
+		decl teamOnly;
+		new var4;
+		if (ConVar.IntValue.get(g_Cvar_FireBombMode) == 1)
+		{
+			var4 = 1;
+		}
+		else
+		{
+			var4 = 0;
+		}
+		teamOnly = var4;
+		new i = 1;
+		while (i <= MaxClients)
+		{
+			new var5;
+			if (IsClientInGame(i) && IsPlayerAlive(i) && client != i)
+			{
+			}
+			else
+			{
+				new var6;
+				if (!(teamOnly && GetClientTeam(client) != GetClientTeam(i)))
+				{
+					new Float:pos[3] = 0.0;
+					GetClientAbsOrigin(i, pos);
+					new Float:distance = GetVectorDistance(vec, pos, false);
+					if (!(distance > ConVar.FloatValue.get(g_Cvar_FireBombRadius)))
+					{
+						new Float:duration = ConVar.FloatValue.get(g_Cvar_BurnDuration);
+						duration *= ConVar.FloatValue.get(g_Cvar_FireBombRadius) - distance / ConVar.FloatValue.get(g_Cvar_FireBombRadius);
+						IgniteEntity(i, duration, false, 0.0, false);
+					}
+				}
+			}
+			i++;
+		}
+	}
+	return 4;
+}
+
+public Action:Timer_Freeze(Handle:timer, any:value)
+{
+	new client = value & 127;
+	new serial = value >>> 7;
+	new var1;
+	if (IsClientInGame(client) && IsPlayerAlive(client) && serial == g_FreezeSerial[client])
+	{
+		UnfreezeClient(client);
+		return 4;
+	}
+	if (g_FreezeTime[client])
+	{
+		if (g_GameEngine != 5)
+		{
+			PrintHintText(client, "%t", "You will be unfrozen", g_FreezeTime[client]);
+		}
+		else
+		{
+			PrintCenterText(client, "%t", "You will be unfrozen", g_FreezeTime[client]);
+		}
+		g_FreezeTime[client]--;
+		SetEntityMoveType(client, 0);
+		SetEntityRenderColor(client, 0, 128, 255, 135);
+		new Float:vec[3] = 0.0;
+		GetClientAbsOrigin(client, vec);
+		new var2 = vec[2];
+		var2 = 5+0(var2, 10);
+		if (g_GlowSprite > -1)
+		{
+			TE_SetupGlowSprite(vec, g_GlowSprite, 0.95, 1.5, 50);
+			TE_SendToAll(0.0);
+		}
+		else
+		{
+			if (g_HaloSprite > -1)
+			{
+				TE_SetupGlowSprite(vec, g_HaloSprite, 0.95, 1.5, 50);
+				TE_SendToAll(0.0);
+			}
+		}
+		return 0;
+	}
+	UnfreezeClient(client);
+	if (g_GameEngine != 5)
+	{
+		PrintHintText(client, "%t", 9484);
+	}
+	else
+	{
+		PrintCenterText(client, "%t", 9500);
+	}
+	return 4;
+}
+
+public Action:Timer_FreezeBomb(Handle:timer, any:value)
+{
+	new client = value & 127;
+	new serial = value >>> 7;
+	new var1;
+	if (IsClientInGame(client) && IsPlayerAlive(client) && serial == g_FreezeBombSerial[client])
+	{
+		KillFreezeBomb(client);
+		return 4;
+	}
+	new Float:vec[3] = 0.0;
+	GetClientEyePosition(client, vec);
+	g_FreezeBombTime[client]--;
+	if (0 < g_FreezeBombTime[client])
+	{
+		new color;
+		if (g_FreezeBombTime[client] > 1)
+		{
+			color = RoundToFloor(5*0(255.0 / ConVar.FloatValue.get(g_Cvar_FreezeBombTicks), g_FreezeBombTime[client]));
+			if (g_BeepSound[0])
+			{
+				EmitAmbientSound(g_BeepSound, vec, client, 130, 0, 1.0, 100, 0.0);
+			}
+		}
+		else
+		{
+			color = 0;
+			if (g_FinalSound[0])
+			{
+				EmitAmbientSound(g_FinalSound, vec, client, 130, 0, 1.0, 100, 0.0);
+			}
+		}
+		SetEntityRenderColor(client, color, color, 255, 255);
+		new String:name[512];
+		GetClientName(client, name, 128);
+		PrintCenterTextAll("%t", "Till Explodes", name, g_FreezeBombTime[client]);
+		new var2;
+		if (g_BeamSprite > -1 && g_HaloSprite > -1)
+		{
+			GetClientAbsOrigin(client, vec);
+			new var6 = vec[2];
+			var6 = 5+0(var6, 10);
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_FreezeBombRadius) / 3.0, g_BeamSprite, g_HaloSprite, 0, 15, 0.5, 5.0, 0.0, greyColor, 10, 0);
+			TE_SendToAll(0.0);
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_FreezeBombRadius) / 3.0, g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 10.0, 0.5, whiteColor, 10, 0);
+			TE_SendToAll(0.0);
+		}
+		return 0;
+	}
+	if (g_ExplosionSprite > -1)
+	{
+		TE_SetupExplosion(vec, g_ExplosionSprite, 5.0, 1, 0, ConVar.IntValue.get(g_Cvar_FreezeBombRadius), 5000, 6840, 67);
+		TE_SendToAll(0.0);
+	}
+	if (g_BoomSound[0])
+	{
+		EmitAmbientSound(g_BoomSound, vec, client, 130, 0, 1.0, 100, 0.0);
+	}
+	KillFreezeBomb(client);
+	FreezeClient(client, ConVar.IntValue.get(g_Cvar_FreezeDuration));
+	if (0 < ConVar.IntValue.get(g_Cvar_FreezeBombMode))
+	{
+		decl bool:teamOnly;
+		new var3;
+		if (ConVar.IntValue.get(g_Cvar_FreezeBombMode) == 1)
+		{
+			var3 = 1;
+		}
+		else
+		{
+			var3 = 0;
+		}
+		teamOnly = var3;
+		new i = 1;
+		while (i <= MaxClients)
+		{
+			new var4;
+			if (IsClientInGame(i) && IsPlayerAlive(i) && client != i)
+			{
+			}
+			else
+			{
+				new var5;
+				if (!(teamOnly && GetClientTeam(client) != GetClientTeam(i)))
+				{
+					new Float:pos[3] = 0.0;
+					GetClientEyePosition(i, pos);
+					new Float:distance = GetVectorDistance(vec, pos, false);
+					if (!(distance > ConVar.FloatValue.get(g_Cvar_FreezeBombRadius)))
+					{
+						if (g_HaloSprite > -1)
+						{
+							if (g_BeamSprite2 > -1)
+							{
+								TE_SetupBeamPoints(vec, pos, g_BeamSprite2, g_HaloSprite, 0, 1, 0.7, 20.0, 50.0, 1, 1.5, blueColor, 10);
+								TE_SendToAll(0.0);
+							}
+							if (g_BeamSprite > -1)
+							{
+								TE_SetupBeamPoints(vec, pos, g_BeamSprite, g_HaloSprite, 0, 1, 0.7, 20.0, 50.0, 1, 1.5, blueColor, 10);
+								TE_SendToAll(0.0);
+							}
+						}
+						FreezeClient(i, ConVar.IntValue.get(g_Cvar_FreezeDuration));
+					}
+				}
+			}
+			i++;
+		}
+	}
+	return 4;
+}
+
+public Action:Timer_TimeBomb(Handle:timer, any:value)
+{
+	new client = value & 127;
+	new serial = value >>> 7;
+	new var1;
+	if (IsClientInGame(client) && IsPlayerAlive(client) && g_TimeBombSerial[client] == serial)
+	{
+		KillTimeBomb(client);
+		return 4;
+	}
+	g_TimeBombTime[client]--;
+	new Float:vec[3] = 0.0;
+	GetClientEyePosition(client, vec);
+	if (0 < g_TimeBombTime[client])
+	{
+		new color;
+		if (g_TimeBombTime[client] > 1)
+		{
+			color = RoundToFloor(5*0(128.0 / ConVar.FloatValue.get(g_Cvar_TimeBombTicks), g_TimeBombTime[client]));
+			if (g_BeepSound[0])
+			{
+				EmitAmbientSound(g_BeepSound, vec, client, 130, 0, 1.0, 100, 0.0);
+			}
+		}
+		else
+		{
+			color = 0;
+			if (g_FinalSound[0])
+			{
+				EmitAmbientSound(g_FinalSound, vec, client, 130, 0, 1.0, 100, 0.0);
+			}
+		}
+		SetEntityRenderColor(client, 255, 128, color, 255);
+		new String:name[512];
+		GetClientName(client, name, 128);
+		PrintCenterTextAll("%t", "Till Explodes", name, g_TimeBombTime[client]);
+		new var2;
+		if (g_BeamSprite > -1 && g_HaloSprite > -1)
+		{
+			GetClientAbsOrigin(client, vec);
+			new var6 = vec[2];
+			var6 = 5+0(var6, 10);
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_TimeBombRadius) / 3.0, g_BeamSprite, g_HaloSprite, 0, 15, 0.5, 5.0, 0.0, greyColor, 10, 0);
+			TE_SendToAll(0.0);
+			TE_SetupBeamRingPoint(vec, 10.0, ConVar.FloatValue.get(g_Cvar_TimeBombRadius) / 3.0, g_BeamSprite, g_HaloSprite, 0, 10, 0.6, 10.0, 0.5, whiteColor, 10, 0);
+			TE_SendToAll(0.0);
+		}
+		return 0;
+	}
+	if (g_ExplosionSprite > -1)
+	{
+		TE_SetupExplosion(vec, g_ExplosionSprite, 5.0, 1, 0, ConVar.IntValue.get(g_Cvar_TimeBombRadius), 5000, 6840, 67);
+		TE_SendToAll(0.0);
+	}
+	if (g_BoomSound[0])
+	{
+		EmitAmbientSound(g_BoomSound, vec, client, 130, 0, 1.0, 100, 0.0);
+	}
+	ForcePlayerSuicide(client);
+	KillTimeBomb(client);
+	SetEntityRenderColor(client, 255, 255, 255, 255);
+	if (0 < ConVar.IntValue.get(g_Cvar_TimeBombMode))
+	{
+		decl teamOnly;
+		new var3;
+		if (ConVar.IntValue.get(g_Cvar_TimeBombMode) == 1)
+		{
+			var3 = 1;
+		}
+		else
+		{
+			var3 = 0;
+		}
+		teamOnly = var3;
+		new i = 1;
+		while (i <= MaxClients)
+		{
+			new var4;
+			if (IsClientInGame(i) && IsPlayerAlive(i) && client != i)
+			{
+			}
+			else
+			{
+				new var5;
+				if (!(teamOnly && GetClientTeam(client) != GetClientTeam(i)))
+				{
+					new Float:pos[3] = 0.0;
+					GetClientEyePosition(i, pos);
+					new Float:distance = GetVectorDistance(vec, pos, false);
+					if (!(distance > ConVar.FloatValue.get(g_Cvar_TimeBombRadius)))
+					{
+						new damage = RoundToFloor(5*0(ConVar.FloatValue.get(g_Cvar_TimeBombRadius) - distance / ConVar.FloatValue.get(g_Cvar_TimeBombRadius), damage));
+						SlapPlayer(i, damage, false);
+						if (g_ExplosionSprite > -1)
+						{
+							TE_SetupExplosion(pos, g_ExplosionSprite, 0.05, 1, 0, 1, 1, 6840, 67);
+							TE_SendToAll(0.0);
+						}
+					}
+				}
+			}
+			i++;
+		}
+	}
+	return 4;
+}
+
+public void:__ext_core_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetFeatureStatus");
+	MarkNativeAsOptional("RequireFeature");
+	MarkNativeAsOptional("AddCommandListener");
+	MarkNativeAsOptional("RemoveCommandListener");
+	MarkNativeAsOptional("BfWriteBool");
+	MarkNativeAsOptional("BfWriteByte");
+	MarkNativeAsOptional("BfWriteChar");
+	MarkNativeAsOptional("BfWriteShort");
+	MarkNativeAsOptional("BfWriteWord");
+	MarkNativeAsOptional("BfWriteNum");
+	MarkNativeAsOptional("BfWriteFloat");
+	MarkNativeAsOptional("BfWriteString");
+	MarkNativeAsOptional("BfWriteEntity");
+	MarkNativeAsOptional("BfWriteAngle");
+	MarkNativeAsOptional("BfWriteCoord");
+	MarkNativeAsOptional("BfWriteVecCoord");
+	MarkNativeAsOptional("BfWriteVecNormal");
+	MarkNativeAsOptional("BfWriteAngles");
+	MarkNativeAsOptional("BfReadBool");
+	MarkNativeAsOptional("BfReadByte");
+	MarkNativeAsOptional("BfReadChar");
+	MarkNativeAsOptional("BfReadShort");
+	MarkNativeAsOptional("BfReadWord");
+	MarkNativeAsOptional("BfReadNum");
+	MarkNativeAsOptional("BfReadFloat");
+	MarkNativeAsOptional("BfReadString");
+	MarkNativeAsOptional("BfReadEntity");
+	MarkNativeAsOptional("BfReadAngle");
+	MarkNativeAsOptional("BfReadCoord");
+	MarkNativeAsOptional("BfReadVecCoord");
+	MarkNativeAsOptional("BfReadVecNormal");
+	MarkNativeAsOptional("BfReadAngles");
+	MarkNativeAsOptional("BfGetNumBytesLeft");
+	MarkNativeAsOptional("BfWrite.WriteBool");
+	MarkNativeAsOptional("BfWrite.WriteByte");
+	MarkNativeAsOptional("BfWrite.WriteChar");
+	MarkNativeAsOptional("BfWrite.WriteShort");
+	MarkNativeAsOptional("BfWrite.WriteWord");
+	MarkNativeAsOptional("BfWrite.WriteNum");
+	MarkNativeAsOptional("BfWrite.WriteFloat");
+	MarkNativeAsOptional("BfWrite.WriteString");
+	MarkNativeAsOptional("BfWrite.WriteEntity");
+	MarkNativeAsOptional("BfWrite.WriteAngle");
+	MarkNativeAsOptional("BfWrite.WriteCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecCoord");
+	MarkNativeAsOptional("BfWrite.WriteVecNormal");
+	MarkNativeAsOptional("BfWrite.WriteAngles");
+	MarkNativeAsOptional("BfRead.ReadBool");
+	MarkNativeAsOptional("BfRead.ReadByte");
+	MarkNativeAsOptional("BfRead.ReadChar");
+	MarkNativeAsOptional("BfRead.ReadShort");
+	MarkNativeAsOptional("BfRead.ReadWord");
+	MarkNativeAsOptional("BfRead.ReadNum");
+	MarkNativeAsOptional("BfRead.ReadFloat");
+	MarkNativeAsOptional("BfRead.ReadString");
+	MarkNativeAsOptional("BfRead.ReadEntity");
+	MarkNativeAsOptional("BfRead.ReadAngle");
+	MarkNativeAsOptional("BfRead.ReadCoord");
+	MarkNativeAsOptional("BfRead.ReadVecCoord");
+	MarkNativeAsOptional("BfRead.ReadVecNormal");
+	MarkNativeAsOptional("BfRead.ReadAngles");
+	MarkNativeAsOptional("BfRead.BytesLeft.get");
+	MarkNativeAsOptional("PbReadInt");
+	MarkNativeAsOptional("PbReadFloat");
+	MarkNativeAsOptional("PbReadBool");
+	MarkNativeAsOptional("PbReadString");
+	MarkNativeAsOptional("PbReadColor");
+	MarkNativeAsOptional("PbReadAngle");
+	MarkNativeAsOptional("PbReadVector");
+	MarkNativeAsOptional("PbReadVector2D");
+	MarkNativeAsOptional("PbGetRepeatedFieldCount");
+	MarkNativeAsOptional("PbSetInt");
+	MarkNativeAsOptional("PbSetFloat");
+	MarkNativeAsOptional("PbSetBool");
+	MarkNativeAsOptional("PbSetString");
+	MarkNativeAsOptional("PbSetColor");
+	MarkNativeAsOptional("PbSetAngle");
+	MarkNativeAsOptional("PbSetVector");
+	MarkNativeAsOptional("PbSetVector2D");
+	MarkNativeAsOptional("PbAddInt");
+	MarkNativeAsOptional("PbAddFloat");
+	MarkNativeAsOptional("PbAddBool");
+	MarkNativeAsOptional("PbAddString");
+	MarkNativeAsOptional("PbAddColor");
+	MarkNativeAsOptional("PbAddAngle");
+	MarkNativeAsOptional("PbAddVector");
+	MarkNativeAsOptional("PbAddVector2D");
+	MarkNativeAsOptional("PbRemoveRepeatedFieldValue");
+	MarkNativeAsOptional("PbReadMessage");
+	MarkNativeAsOptional("PbReadRepeatedMessage");
+	MarkNativeAsOptional("PbAddMessage");
+	MarkNativeAsOptional("Protobuf.ReadInt");
+	MarkNativeAsOptional("Protobuf.ReadInt64");
+	MarkNativeAsOptional("Protobuf.ReadFloat");
+	MarkNativeAsOptional("Protobuf.ReadBool");
+	MarkNativeAsOptional("Protobuf.ReadString");
+	MarkNativeAsOptional("Protobuf.ReadColor");
+	MarkNativeAsOptional("Protobuf.ReadAngle");
+	MarkNativeAsOptional("Protobuf.ReadVector");
+	MarkNativeAsOptional("Protobuf.ReadVector2D");
+	MarkNativeAsOptional("Protobuf.GetRepeatedFieldCount");
+	MarkNativeAsOptional("Protobuf.SetInt");
+	MarkNativeAsOptional("Protobuf.SetInt64");
+	MarkNativeAsOptional("Protobuf.SetFloat");
+	MarkNativeAsOptional("Protobuf.SetBool");
+	MarkNativeAsOptional("Protobuf.SetString");
+	MarkNativeAsOptional("Protobuf.SetColor");
+	MarkNativeAsOptional("Protobuf.SetAngle");
+	MarkNativeAsOptional("Protobuf.SetVector");
+	MarkNativeAsOptional("Protobuf.SetVector2D");
+	MarkNativeAsOptional("Protobuf.AddInt");
+	MarkNativeAsOptional("Protobuf.AddInt64");
+	MarkNativeAsOptional("Protobuf.AddFloat");
+	MarkNativeAsOptional("Protobuf.AddBool");
+	MarkNativeAsOptional("Protobuf.AddString");
+	MarkNativeAsOptional("Protobuf.AddColor");
+	MarkNativeAsOptional("Protobuf.AddAngle");
+	MarkNativeAsOptional("Protobuf.AddVector");
+	MarkNativeAsOptional("Protobuf.AddVector2D");
+	MarkNativeAsOptional("Protobuf.RemoveRepeatedFieldValue");
+	MarkNativeAsOptional("Protobuf.ReadMessage");
+	MarkNativeAsOptional("Protobuf.ReadRepeatedMessage");
+	MarkNativeAsOptional("Protobuf.AddMessage");
+	VerifyCoreVersion();
+	return 0;
+}
+
+public void:__ext_topmenus_SetNTVOptional()
+{
+	MarkNativeAsOptional("CreateTopMenu");
+	MarkNativeAsOptional("LoadTopMenuConfig");
+	MarkNativeAsOptional("AddToTopMenu");
+	MarkNativeAsOptional("RemoveFromTopMenu");
+	MarkNativeAsOptional("DisplayTopMenu");
+	MarkNativeAsOptional("DisplayTopMenuCategory");
+	MarkNativeAsOptional("FindTopMenuCategory");
+	MarkNativeAsOptional("SetTopMenuTitleCaching");
+	MarkNativeAsOptional("TopMenu.TopMenu");
+	MarkNativeAsOptional("TopMenu.FromHandle");
+	MarkNativeAsOptional("TopMenu.LoadConfig");
+	MarkNativeAsOptional("TopMenu.AddCategory");
+	MarkNativeAsOptional("TopMenu.AddItem");
+	MarkNativeAsOptional("TopMenu.GetInfoString");
+	MarkNativeAsOptional("TopMenu.GetObjName");
+	MarkNativeAsOptional("TopMenu.Remove");
+	MarkNativeAsOptional("TopMenu.Display");
+	MarkNativeAsOptional("TopMenu.DisplayCategory");
+	MarkNativeAsOptional("TopMenu.FindCategory");
+	MarkNativeAsOptional("TopMenu.CacheTitles.set");
+	return 0;
+}
+
+public void:__pl_adminmenu_SetNTVOptional()
+{
+	MarkNativeAsOptional("GetAdminTopMenu");
+	MarkNativeAsOptional("AddTargetsToMenu");
+	MarkNativeAsOptional("AddTargetsToMenu2");
+	return 0;
+}
+
