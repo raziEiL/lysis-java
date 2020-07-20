@@ -1,24 +1,28 @@
 package lysis.gui;
 
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
-import javax.swing.border.EmptyBorder;
-import javax.swing.JTextPane;
 import javax.swing.JTextArea;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.Insets;
+import javax.swing.JTextPane;
+
 import lysis.Lysis;
 
-public class GUIMain extends JFrame {
+public class GUIMain {
 
-	/**
-	 * 
-	 */
-	private static final long serialVersionUID = 1L;
-	private JPanel contentPane;
+	private JFrame frame;
+	private Lysis lysis;
 
 	/**
 	 * Launch the application.
@@ -27,8 +31,8 @@ public class GUIMain extends JFrame {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
-					GUIMain frame = new GUIMain();
-					frame.setVisible(true);
+					GUIMain window = new GUIMain();
+					window.frame.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -37,79 +41,120 @@ public class GUIMain extends JFrame {
 	}
 
 	/**
-	 * Create the frame.
+	 * Create the application.
 	 */
 	public GUIMain() {
-		setResizable(false);
-		setTitle("Lysis Decompiler");
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		setBounds(100, 100, 350, 300);
-		contentPane = new JPanel();
-		contentPane.setBackground(Color.LIGHT_GRAY);
-		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
-		setContentPane(contentPane);
-		contentPane.setLayout(null);
-		
-		JTextPane txtpnDragDrop = new JTextPane();
-		txtpnDragDrop.setText("Drag & Drop smx Files");
-		txtpnDragDrop.setForeground(new Color(51, 153, 255));
-		txtpnDragDrop.setFont(new Font("Tahoma", Font.BOLD, 18));
-		txtpnDragDrop.setEditable(false);
-		txtpnDragDrop.setBackground(Color.LIGHT_GRAY);
-		txtpnDragDrop.setBounds(68, 100, 205, 28);
-		contentPane.add(txtpnDragDrop);
-		
-		JScrollPane scrollPane = new JScrollPane();
+		initialize();
+	}
+
+	/**
+	 * Initialize the contents of the frame.
+	 */
+	private void initialize() {
+		lysis = new Lysis();
+
+		frame = new JFrame();
+		frame.setBounds(100, 100, 450, 300);
+		frame.setMinimumSize(new Dimension(450, 300));
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setTitle("Lysis Decompiler");
+		frame.setBackground(new Color(65, 84, 99));
+
+		JPanel panel = new JPanel();
+		panel.setBackground(new Color(65, 84, 99));
+		panel.setForeground(Color.WHITE);
+		// panel.setBorder(null);
+		frame.getContentPane().add(panel, BorderLayout.SOUTH);
+
+		JTextPane text1 = new JTextPane();
+		text1.setFont(new Font("Tahoma", Font.PLAIN, 11));
+		text1.setBackground(new Color(65, 84, 99));
+		text1.setForeground(Color.WHITE);
+		text1.setEditable(false);
+		text1.setText("Lysis 09-JUN-2020 commit e8901c4");
+		panel.setLayout(new FlowLayout(FlowLayout.CENTER, 50, 5));
+		panel.add(text1);
+
+		JTextPane text2 = new JTextPane();
+		text2.setFont(new Font("Tahoma", Font.PLAIN, 11));
+		text2.setBackground(new Color(65, 84, 99));
+		text2.setForeground(Color.WHITE);
+		text2.setEditable(false);
+		text2.setText("GUI v1.2 by raziEiL [disawar1]");
+		panel.add(text2);
+
+		JProgressBar progressBar = new JProgressBar();
+		progressBar.setBackground(new Color(65, 84, 99));
+		progressBar.setForeground(new Color(71, 205, 196));
+		progressBar.setBorder(null);
+		progressBar.setVisible(false);
+		progressBar.setStringPainted(true);
+		frame.getContentPane().add(progressBar, BorderLayout.NORTH);
+
+		JPanel panel2 = new JPanel();
+		panel2.setBackground(new Color(65, 84, 99));
+		frame.getContentPane().add(panel2, BorderLayout.CENTER);
+		GridBagLayout gbl_panel_2 = new GridBagLayout();
+		panel2.setLayout(gbl_panel_2);
+
+		JTextPane text3 = new JTextPane();
+		text3.setFont(new Font("Tahoma", Font.PLAIN, 18));
+		text3.setBackground(new Color(65, 84, 99));
+		text3.setForeground(new Color(71, 205, 196));
+		text3.setEditable(false);
+		text3.setText("Drag & Drop smx Files");
+		GridBagConstraints grid = new GridBagConstraints();
+		grid.gridx = 0;
+		grid.gridy = 0;
+		panel2.add(text3, grid);
+
+		JTextArea textArea = new JTextArea();
+		textArea.setFont(new Font("Tahoma", Font.PLAIN, 11));
+		textArea.setBackground(new Color(65, 84, 99));
+		textArea.setForeground(Color.WHITE);
+		textArea.setEditable(false);
+		textArea.setLineWrap(true);
+		textArea.setMargin(new Insets(5, 5, 5, 5));
+
+		JScrollPane scrollPane = new JScrollPane(textArea);
 		scrollPane.setBorder(null);
-		scrollPane.setBounds(5, 5, 335, 225);
-		contentPane.add(scrollPane);
-		
-		JTextArea txtrQweqwe = new JTextArea();
-		txtrQweqwe.setLineWrap(true);
-		txtrQweqwe.setBorder(null);
-		scrollPane.setViewportView(txtrQweqwe);
-		txtrQweqwe.setFont(new Font("Consolas", Font.PLAIN, 12));
-		txtrQweqwe.setEditable(false);
-		txtrQweqwe.setBackground(Color.LIGHT_GRAY);
-		txtrQweqwe.setMargin(new Insets(25, 5, 5, 5));
-		
-		JTextPane txtpnLysisVersionjan = new JTextPane();
-		txtpnLysisVersionjan.setFont(new Font("Tahoma", Font.PLAIN, 11));
-		txtpnLysisVersionjan.setForeground(Color.BLACK);
-		txtpnLysisVersionjan.setBackground(Color.LIGHT_GRAY);
-		txtpnLysisVersionjan.setEditable(false);
-		txtpnLysisVersionjan.setBounds(62, 232, 218, 20);
-		txtpnLysisVersionjan.setText("Lysis version: 22-JUL-2019 commit 9cd470f");
-		contentPane.add(txtpnLysisVersionjan);
-		
-		JTextPane txtpnGuiMenuBy = new JTextPane();
-		txtpnGuiMenuBy.setEditable(false);
-		txtpnGuiMenuBy.setFont(new Font("Tahoma", Font.PLAIN, 11));
-		txtpnGuiMenuBy.setForeground(Color.BLACK);
-		txtpnGuiMenuBy.setBackground(Color.LIGHT_GRAY);
-		txtpnGuiMenuBy.setText("GUI Menu version: 1.1 by raziEiL [disawar1]");
-		txtpnGuiMenuBy.setBounds(64, 249, 216, 20);
-		contentPane.add(txtpnGuiMenuBy);
-		
-        new FileDrop( System.out, txtrQweqwe, /*dragBorder,*/ new FileDrop.Listener()
-        {   public void filesDropped( java.io.File[] files )
-            {   
-        		txtpnDragDrop.setVisible(false);
-        		txtrQweqwe.append( files.length + " file(s) added to queue" + "\n" );
-        		for( int i = 0; i < files.length; i++ )
-                {   try
-                    {   txtrQweqwe.append( files[i].getCanonicalPath() + "\n" );
-        				Lysis lysis = new Lysis();
-        				lysis.DecompileIt(files[i].getPath(), files[i].getName(), txtrQweqwe);
-        				txtrQweqwe.append("\n");
-        				
-                    }   // end try
-                    catch( java.io.IOException e ) {}
-                }   // end for: through each dropped file
-            }   // end filesDropped
-        }); // end FileDrop.Listener
-        
-		//for (int i = 0; i < 10; i++)
-		//	txtrQweqwe.append(i + " hellooooooooooooooooooooooooooooooooooooooooooooo!!!" + "\n");
+
+		frame.pack();
+
+		new FileDrop(System.out, panel2, new FileDrop.Listener() {
+			public void filesDropped(java.io.File[] files) {
+				progressBar.setVisible(true);
+				frame.getContentPane().remove(panel2);
+				panel2.setVisible(false);
+				frame.getContentPane().add(scrollPane, BorderLayout.CENTER);
+				decompile(textArea, progressBar, files);
+
+			}
+		});
+		new FileDrop(System.out, textArea, new FileDrop.Listener() {
+			public void filesDropped(java.io.File[] files) {
+				decompile(textArea, progressBar, files);
+			}
+		});
+	}
+
+	private void decompile(javax.swing.JTextArea textArea, javax.swing.JProgressBar progressBar, java.io.File[] files) {
+		Runnable task = () -> {
+			textArea.append(files.length + " file(s) added to queue" + "\n");
+
+			for (int i = 0; i < files.length; i++) {
+				try {
+					textArea.append(files[i].getCanonicalPath() + "\n");
+					// Lysis lysis = new Lysis();
+					lysis.DecompileIt(files[i].getPath(), files[i].getName(), textArea);
+					textArea.append("\n");
+					progressBar.setValue(Math.round((float) ((float) (i + 1) / (float) files.length * 100.0)));
+				} // end try
+				catch (Exception e) {
+				}
+			} // end for: through each dropped file
+		};
+		Thread thread = new Thread(task);
+		thread.start();
 	}
 }

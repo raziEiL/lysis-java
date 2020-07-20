@@ -1,5 +1,6 @@
 package lysis;
 
+import java.awt.TextArea;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.LinkedList;
